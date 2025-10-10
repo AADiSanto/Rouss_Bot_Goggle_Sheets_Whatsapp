@@ -40,5 +40,3 @@ Define en Render Dashboard (Environment -> Environment Variables) o en tu entorn
 ## Notas de seguridad
 - Nunca subir `credentials.json` ni `.env` con valores reales al repo.
 - Si accidentalmente subiste secrets: rota las claves inmediatamente.
-
-
