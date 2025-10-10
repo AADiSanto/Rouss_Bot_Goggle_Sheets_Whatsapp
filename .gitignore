@@ -1,0 +1,56 @@
+# Virtual envs
+.venv/
+env/
+venv/
+ENV/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Backups y carpetas de usuario
+..BUps/
+
+# Documentación del Proyecto
+..Documentación
+
+# Comandos para GitHub
+..GitHub_Comandos
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.installed.cfg
+
+# Tools / os
+.DS_Store
+.idea/
+.vscode/
+
+# Logs and runtime
+logs/
+*.log
+*.sqlite3
+
+# Secrets / local config
+.env
+credentials.json
+sheets/credentials.json
+*.pem
+
+# Misc
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+
+
