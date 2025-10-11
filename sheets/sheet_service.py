@@ -1,6 +1,35 @@
+# *********************************************************************************************************************
+#  Created By: Ing. Antonio Alberto Di Santo.-
+#  Created On: Lunes 06 de Octubre del 2025.-
+#
+#     Program: Bot de WhatsApp con Google Sheets,
+#                 para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
+#
+# *********************************************************************************************************************
+#
+#  *** Python v3.13.6
+#
+#  *** Compilar en el Directorio del Programa desde PowerShell como Administrador ( Nó es Necesario ).-
+#
+#  ***     pyinstaller --onefile --noconsole Transistor_MosFET_Parámetros_Curva_Trabajo.py
+#
+#          Para Incluír un ícono en el .exe:
+#
+#          Buscar el Icono en: https://www.svgrepo.com/
+#
+#             Guardarlo como .svg
+#
+#          Luego Converirlo de .svg a .ico en: https://convertico.com/es/svg-a-ico/
+#
+#  ***     pyinstaller --onefile --icon=MosFET.ico Transistor_MosFET_Parámetros_Curva_Trabajo.py
+#
+#  ***        El .exe Compilado Estará Dentro de la Carpeta "dist".-
+#
+# *********************************************************************************************************************
+
 """
-Servicio de integración con Google Sheets
-Gestiona lectura, escritura y actualización de turnos
+Servicio de Integración con Google Sheets.-
+Gestiona Lectura, Escritura y Actualización de Turnos.-
 """
 
 import logging
@@ -14,7 +43,7 @@ from google.oauth2 import service_account
 from datetime import datetime
 import pytz
 
-# Construye la ruta al archivo credentials.json relativo a este archivo (sheets/)
+# Construye la Ruta al Archivo credentials.json Relativo a éste Archivo ( sheets/ ).-
 HERE = Path(__file__).resolve().parent
 SERVICE_ACCOUNT_FILE = HERE / 'credentials.json'
 
@@ -23,23 +52,23 @@ SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '1zEUerYZ20wk1fgh1s1kse_eDb4SRxptFP
 SHEET_NAME = 'Rouss_Turnos_Coiffeur'
 TIMEZONE = 'America/Argentina/Buenos_Aires'
 
-# Verificación: archivo de credenciales presente
+# Verificación: Archivo de Credenciales Presente.-
 if not SERVICE_ACCOUNT_FILE.exists():
     raise FileNotFoundError(f"ERROR: El Archivo de Credenciales Nó Fué Encontrado: {SERVICE_ACCOUNT_FILE}")
 
-# Inicializar cliente de Google Sheets
+# Inicializar Cliente de Google Sheets.-
 creds = service_account.Credentials.from_service_account_file(
     str(SERVICE_ACCOUNT_FILE), scopes=SCOPES)
 service = build('sheets', 'v4', credentials=creds)
 sheets = service.spreadsheets()
 tz = pytz.timezone(TIMEZONE)
 
-# Normalizar nombre de hoja
+# Normalizar Nombre de Hoja.-
 SHEET_NAME = (SHEET_NAME or '').strip()
 
-# --- Verificación de la existencia de la hoja en el spreadsheet ---
+# --- Verificación de la Existencia de la Hoja en el Spreadsheet.-
 def _get_sheet_titles(spreadsheet_id):
-    """Devuelve la lista de títulos (tabs) del spreadsheet."""
+    """Devuelve la Lista de Títulos ( tabs ) del Spreadsheet."""
     try:
         meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id,
                                          includeGridData=False).execute()
@@ -50,34 +79,34 @@ def _get_sheet_titles(spreadsheet_id):
     titles = [s.get('properties', {}).get('title', '') for s in sheets_meta]
     return titles
 
-# Comprobar que la hoja existe (ejecutar después de inicializar `service`)
+# Comprobar que la Hoja Existe ( Ejecutar Después de Inicializar `service` ).-
 try:
     titles = _get_sheet_titles(SPREADSHEET_ID)
 except Exception as e:
-    # Si no podemos obtener títulos por un fallo en la API, marcamos como no disponible
+    # Si Nó Podemos Obtener Títulos por un Fallo en la API, Marcamos como Nó Disponible.-
     print("ERROR: La Base De Datos Nó está Disponible, Reintente Nuevamente, Gracias.-")
     print(f"(DEBUG) ERROR: Al Obtener Pestañas: {repr(e)}")
     DATA_AVAILABLE = False
 else:
     if SHEET_NAME not in titles:
-        # Mensaje amigable solicitado por el usuario
+        # Mensaje Amigable Solicitado por el Cliente.-
         print("ERROR: La Base De Datos Nó está Disponible, Reintente Nuevamente, Gracias.-")
         # Log adicional opcional para debugging:
         print(f"(DEBUG) Pestañas Disponibles: {titles}")
         DATA_AVAILABLE = False
     else:
-        # opcional: confirmar en log que la hoja fue encontrada
+        # Opcional: Confirmar en Log que la Hoja fué Encontrada.-
         print(f"(DEBUG) Hoja Encontrada: '{SHEET_NAME}' en Spreadsheet {SPREADSHEET_ID}")
         DATA_AVAILABLE = True
 
-# --- Helper para construir rangos seguros ---
+# --- Helper para Construir Rangos Seguros ---
 def _safe_range(sheet_name, a1_range):
-    # envuelve el nombre con comillas simples para evitar errores si tiene espacios/símbolos
+    # Envuelve el Nombre con Comillas Simples para Evitar Errores sí Tiene Espacios / Símbolos.-
     return f"'{sheet_name}'!{a1_range}"
 
 
 def append_row(values):
-    """Agrega una fila al final de la hoja"""
+    """Agrega una Fila al Final de la Hoja"""
     if not DATA_AVAILABLE:
         print("La Base De Datos Nó Está Disponible, Reintente Nuevamente, Gracias.-")
         return None
@@ -100,10 +129,10 @@ def append_row(values):
 
 
 def read_sheet(range_a1=None):
-    """Lee datos de la hoja"""
+    """Lee Datos de la Hoja"""
     if not DATA_AVAILABLE:
         print("La Base De Datos Nó Está Disponible, Reintente Nuevamente, Gracias.-")
-        return []  # lectura no destructiva: devolvemos lista vacía
+        return []  # Lectura Nó Destructiva: Devolvemos Lista Vacía.-
 
     if not range_a1:
         range_a1 = 'A2:K1000'
@@ -122,7 +151,7 @@ def read_sheet(range_a1=None):
 
 
 def update_row(row_index, values):
-    """Actualiza una fila específica (row_index empieza en 2)"""
+    """Actualiza una Fila Específica ( row_index Empieza en 2 )"""
     if not DATA_AVAILABLE:
         print("La Base De Datos Nó Está Disponible, Reintente Nuevamente, Gracias.-")
         return None
@@ -145,14 +174,14 @@ def update_row(row_index, values):
 
 def get_available_slots(coiffeur, fecha):
     """
-    Obtiene horarios disponibles para un coiffeur en una fecha específica
+    Obtiene Horarios Disponibles para un Coiffeur en una Fecha Específica.-
 
     Args:
         coiffeur: 'Walter' o 'María'
         fecha: string en formato 'YYYY-MM-DD'
 
     Returns:
-        Lista de horarios disponibles ['10:00', '11:30', ...]
+        Lista de Horarios Disponibles [ '10:00', '11:30', ... ]
     """
     # Horarios Posibles del Salón ( Cada 30 Minutos ).-
     all_slots = [
@@ -161,29 +190,29 @@ def get_available_slots(coiffeur, fecha):
         '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30'
     ]
 
-    # Obtener Turnos Ocupados
+    # Obtener Turnos Ocupados.-
     data = read_sheet()
     occupied_slots = set()
 
     for row in data:
         if len(row) >= 7:
-            # Verificar si el turno es del mismo coiffeur, fecha y está Confirmado o Pendiente
+            # Verificar si el Turno es del Mismo Coiffeur, Fecha y está Confirmado o Pendiente.-
             if (row[3] == coiffeur and
                     row[4] == fecha and
                     row[6] in ['Confirmado', 'Pendiente']):
                 occupied_slots.add(row[5])
 
-    # Retornar horarios disponibles
+    # Retornar Horarios Disponibles.-
     available = [slot for slot in all_slots if slot not in occupied_slots]
     return available
 
 
 def check_availability(coiffeur, fecha, hora):
     """
-    Verifica si un horario específico está disponible
+    Verifica si un Horario Específico está Disponible.-
 
     Returns:
-        bool: True si está disponible, False si está ocupado
+        bool: True si está Disponible, False si Está Ocupado.-
     """
     data = read_sheet()
 
@@ -200,7 +229,7 @@ def check_availability(coiffeur, fecha, hora):
 
 def elegir_coiffeur(preferencia, fecha, hora):
     """
-    Elige el coiffeur según preferencia y disponibilidad
+    Elige el oiffeur Según Preferencia y Disponibilidad.-
 
     Args:
         preferencia: 'walter', 'maría', 'maria' o None
@@ -208,9 +237,9 @@ def elegir_coiffeur(preferencia, fecha, hora):
         hora: hora en formato 'HH:MM'
 
     Returns:
-        str: Nombre del coiffeur ('Walter' o 'María') o None si ninguno disponible
+        str: Nombre del Coiffeur ( 'Walter' o 'María' ) o None Sí Ninguno Disponible.-
     """
-    # Normalizar nombres
+    # Normalizar Nombres.-
     if preferencia:
         preferencia = preferencia.lower()
         if preferencia in ['walter']:
@@ -218,12 +247,12 @@ def elegir_coiffeur(preferencia, fecha, hora):
         elif preferencia in ['maría', 'maria']:
             return 'María' if check_availability('María', fecha, hora) else None
 
-    # Sin preferencia: aplicar round-robin o menor carga
+    # Sin Preferencia: Aplicar round-robin o Menor Carga.-
     walter_available = check_availability('Walter', fecha, hora)
     maria_available = check_availability('María', fecha, hora)
 
     if walter_available and maria_available:
-        # Aplicar estrategia de menor carga
+        # Aplicar Estrategia de Menor Carga.-
         data = read_sheet()
         walter_count = sum(1 for row in data if len(row) >= 7 and
                            row[3] == 'Walter' and row[4] == fecha and
@@ -240,60 +269,59 @@ def elegir_coiffeur(preferencia, fecha, hora):
     else:
         return None
 
-
 # ------------------------------------------------------------------
-# Pequeño "smoke test" local para verificar acceso a la hoja.
-# Ejecutar sólo si quieres probar manualmente: python -m sheets.sheet_service
+# Pequeño "smoke test" Local para Verificar Acceso a la Hoja de Cálculo.-
+# Ejecutar Sólo Sí sé Quiere Probar Manualmente: python -m sheets.sheet_service
 # ------------------------------------------------------------------
 def smoke_test_read():
-    """Lee unas filas y muestra cuántas devolvió la API (prueba de solo lectura)."""
+    """Lee Unas Filas y Muestra Cuántas Devolvió la API ( Prueba de Sólo Lectura )"""
     try:
         values = read_sheet('A1:K10')  # lectura conservadora
-        print("SmokeTest: lectura OK. Filas devueltas:", len(values))
-        # opcional: imprimir la primera fila
+        print("SmokeTest: Lectura OK. Filas Devueltas:", len(values))
+        # Opcional: Imprimir lá Primera Fila.-
         if values:
-            print("SmokeTest: primera fila:", values[0])
+            print("SmokeTest: Primera Fila: ", values[0])
     except Exception as e:
-        print("SmokeTest: ERROR en lectura:", repr(e))
+        print("SmokeTest: ERROR en Lectura: ", repr(e))
         raise
 
 
 def smoke_test_append():
-    """Intenta agregar una fila de prueba identificable al final de la hoja."""
+    """Intenta Agregar una Fila de Prueba Identificable al Final de la Hoja"""
     ts = datetime.now(tz).astimezone(tz).isoformat()
     test_row = ['__SMOKE_TEST__', ts]
     try:
         append_row(test_row)
-        print("SmokeTest: append OK. Fila añadida:", test_row)
+        print("SmokeTest: Append OK. Fila Añadida: ", test_row)
     except Exception as e:
-        print("SmokeTest: ERROR en append:", repr(e))
+        print("SmokeTest: ERROR en Append: ", repr(e))
         raise
 
 
 def smoke_test():
-    """Ejecuta los tests de lectura y append (append es opcional)."""
+    """Ejecuta los Tests de Lectura y Append ( Append es Opcional )"""
     print("=== Iniciando Smoke Test de Google Sheets ===")
     print("Spreadsheet ID:", SPREADSHEET_ID)
-    print("Sheet name (normalizado):", SHEET_NAME)
+    print("Sheet Name ( Normalizado ): ", SHEET_NAME)
     try:
-        # Verificar títulos para confirmar la existencia de la hoja
+        # Verificar Títulos para Confirmar la Existencia de la Hoja de Cálculo.-
         titles = _get_sheet_titles(SPREADSHEET_ID)
-        print("Pestañas disponibles:", titles)
+        print("Pestañas Disponibles:", titles)
     except Exception as e:
-        print("No se pudieron obtener pestañas:", repr(e))
+        print("Nó Sé Pudieron Obtener Pestañas: ", repr(e))
         return
 
-    # Lectura (non-destructive)
+    # Lectura ( Non-Destructive ).-
     smoke_test_read()
 
-    # Append de prueba: comentalo si NO querés escribir en la hoja
+    # Append de Prueba: Comentarlo Sí Nó Sé Quiere Escribir en la Hoja.-
     smoke_test_append()
-    print("=== Smoke Test completado ===")
+    print("=== Smoke Test Completado ===")
 
 
 if __name__ == "__main__":
-    # Se ejecuta solo si corres el archivo directamente:
-    # desde la raíz del proyecto: python -m sheets.sheet_service
+    # Se Ejecuta Sólo Sí Sé Corre El Archivo Directamente:
+    # Desde La Raíz Del Proyecto: python -m sheets.sheet_service
     smoke_test()
 
 

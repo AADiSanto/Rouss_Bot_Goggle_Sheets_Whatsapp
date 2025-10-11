@@ -1,6 +1,35 @@
+# *********************************************************************************************************************
+#  Created By: Ing. Antonio Alberto Di Santo.-
+#  Created On: Lunes 06 de Octubre del 2025.-
+#
+#     Program: Bot de WhatsApp con Google Sheets,
+#                 para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
+#
+# *********************************************************************************************************************
+#
+#  *** Python v3.13.6
+#
+#  *** Compilar en el Directorio del Programa desde PowerShell como Administrador ( Nó es Necesario ).-
+#
+#  ***     pyinstaller --onefile --noconsole Transistor_MosFET_Parámetros_Curva_Trabajo.py
+#
+#          Para Incluír un ícono en el .exe:
+#
+#          Buscar el Icono en: https://www.svgrepo.com/
+#
+#             Guardarlo como .svg
+#
+#          Luego Converirlo de .svg a .ico en: https://convertico.com/es/svg-a-ico/
+#
+#  ***     pyinstaller --onefile --icon=MosFET.ico Transistor_MosFET_Parámetros_Curva_Trabajo.py
+#
+#  ***        El .exe Compilado Estará Dentro de la Carpeta "dist".-
+#
+# *********************************************************************************************************************
+
 """
 Servidor Flask principal - Webhook de WhatsApp
-Maneja la lógica conversacional y flujo de turnos
+Maneja la Lógica Conversacional y Flujo de Turnos.-
 """
 import logging
 
@@ -18,14 +47,17 @@ logger = logging.getLogger(__name__)
 from flask import Flask, request, jsonify
 import os
 from dotenv import load_dotenv
+
 from sheets.sheet_service import (
     get_available_slots, check_availability,
     elegir_coiffeur
 )
+
 from sheets.scheduler_service import (
     crear_reserva_provisional, confirmar_reserva,
     iniciar_scheduler
 )
+
 from bot.whatsapp_service import send_message, send_list_message
 
 load_dotenv()
@@ -33,16 +65,16 @@ load_dotenv()
 app = Flask(__name__)
 VERIFY_TOKEN = os.getenv('WEBHOOK_VERIFY_TOKEN')
 
-# Cargar tu número personal desde .env
+# Cargar Tú Número Personal Desde .env
 PHONE_PERSONAL = os.getenv('WHATSAPP_PHONE_PERSONAL', '5491155287012')
 
-# Diccionario para mantener estado de conversaciones (en producción usar Redis/DB)
+# Diccionario para Mantener Estado de Conversaciones ( En Producción Usar Redis / DB ).-
 conversations = {}
 
 
 @app.route('/webhook', methods=['GET'])
 def verify_webhook():
-    """Verificación del webhook por parte de Meta"""
+    """Verificación del webhook por Parte de Meta"""
     mode = request.args.get('hub.mode')
     token = request.args.get('hub.verify_token')
     challenge = request.args.get('hub.challenge')
@@ -55,14 +87,14 @@ def verify_webhook():
 
 @app.route('/webhook', methods=['POST'])
 def receive_message():
-    """Recibe mensajes entrantes de WhatsApp"""
+    """Recibe Mensajes Entrantes de WhatsApp"""
     try:
         data = request.get_json()
 
         if not data or 'entry' not in data:
             return 'OK', 200
 
-        # Extraer mensaje
+        # Extraer Mensaje.-
         entry = data['entry'][0]
         changes = entry.get('changes', [])
 
@@ -78,7 +110,7 @@ def receive_message():
         message = messages[0]
         sender = message['from']
 
-        # Procesar diferentes tipos de mensaje
+        # Procesar Diferentes Tipos de Mensaje.-
         if message['type'] == 'text':
             text = message['text']['body'].strip()
             process_text_message(sender, text)
@@ -96,7 +128,7 @@ def receive_message():
 
 
 def process_text_message(sender, text):
-    """Procesa mensajes de texto según el estado de la conversación"""
+    """Procesa Mensajes de Texto Según el Estado de la Conversación"""
     text_lower = text.lower()
 
     # Obtener o crear estado de conversación
@@ -106,15 +138,15 @@ def process_text_message(sender, text):
     state = conversations[sender]
     step = state['step']
 
-    # Flujo de conversación
+    # Flujo de Conversación.-
     if step == 0 or 'turno' in text_lower or 'hola' in text_lower:
-        # Inicio
+        # Inicio.-
         send_message(PHONE_PERSONAL,
                      "¡Hola! 👋 Bienvenido a Rouss Coiffeur's - ¿Con Quién Querés Tú Turno?...\n1️⃣ Walter\n2️⃣ María\n\nEscribí el Nombre del Coiffeur de Tú Preferencia.-")
         state['step'] = 1
 
     elif step == 1:
-        # Selección de coiffeur
+        # Selección de Coiffeur.-
         if 'walter' in text_lower:
             state['coiffeur'] = 'Walter'
             send_message(PHONE_PERSONAL, "Perfecto, Elegiste a Walter.\n\n¿Cuál és Tú Nombre?")
@@ -127,7 +159,7 @@ def process_text_message(sender, text):
             send_message(PHONE_PERSONAL, "Nó Entendí Tú Respuesta. Por Favor Escribí 'Walter' o 'María'...")
 
     elif step == 1.5:
-        # Captura del nombre
+        # Captura del Nombre del Cliente.-
         state['nombre'] = text.strip()
         state['telefono'] = sender
         send_message(PHONE_PERSONAL,
@@ -135,7 +167,7 @@ def process_text_message(sender, text):
         state['step'] = 2
 
     elif step == 2:
-        # Selección de servicio
+        # Selección de Servicio.-
         if 'color' in text_lower:
             state['servicio'] = 'Color'
         elif 'corte' in text_lower:
@@ -151,16 +183,16 @@ def process_text_message(sender, text):
         state['step'] = 3
 
     elif step == 3:
-        # Selección de fecha
+        # Selección de Fecha Elegida por el Cliente para el Turno,.
         try:
-            # Parsear fecha (DD-MM-AAAA)
+            # Parsear Fecha ( DD-MM-AAAA ).-
             from datetime import datetime
             fecha_obj = datetime.strptime(text, '%d-%m-%Y')
             fecha_formatted = fecha_obj.strftime('%Y-%m-%d')
             state['fecha'] = fecha_formatted
             state['fecha_display'] = text
 
-            # Obtener horarios disponibles
+            # Obtener Horarios Disponibles para la Fecha del Turno Elegida por el Cliente,.
             horarios = get_available_slots(state['coiffeur'], fecha_formatted)
 
             if horarios:
@@ -178,21 +210,22 @@ def process_text_message(sender, text):
                          "ERROR: Formato de Fecha Incorrecto. Por Favor usá: DD-MM-AAAA\nEj.: 15-10-2025")
 
     elif step == 4:
-        # Selección de horario
+        # Selección del Horario para la Fecha del Turno Elegida por el Cliente,.
         hora = text.strip()
 
-        # Validar formato de hora
+        # Validar Formato de la Hora Elegida.-
         if not hora.replace(':', '').isdigit() or len(hora) not in [4, 5]:
             send_message(PHONE_PERSONAL, "ERROR: Por Favor Escribí la Hora en Formato HH:MM ( Ej.: 11:00)")
             return
 
-        # Verificar disponibilidad
+        # Verificar Disponibilidad de la Hora Elegida.-
         if check_availability(state['coiffeur'], state['fecha'], hora):
             state['hora'] = hora
 
-            # Crear reserva provisional
+            # Crear Reserva Provisional del Turno elegido por el Cliente.-
             nombre = state.get('nombre', 'Cliente')
             telefono = state.get('telefono', sender)
+
             reservation_id = crear_reserva_provisional(
                 nombre, telefono, state['servicio'],
                 state['coiffeur'], state['fecha'], hora
@@ -208,7 +241,7 @@ def process_text_message(sender, text):
                          f"Lo Siento, ese Horario Yá Fue Reservado... Por Favor Elegí Otro de la Lista...")
 
     elif step == 5:
-        # Confirmación final
+        # Confirmación Final del Turno elegido por el Cliente.-
         if 'confirmar' in text_lower:
             success = confirmar_reserva(state['reservation_id'])
 
@@ -231,7 +264,7 @@ def process_text_message(sender, text):
 
 def process_interactive_response(sender, selected_id):
     """Procesa respuestas de mensajes interactivos (listas, botones)"""
-    # Implementar lógica para mensajes interactivos si se usan
+    # Implementar Lógica Para Mensajes Interactivos Si Sé Usan.-
     pass
 
 
@@ -242,6 +275,6 @@ def health_check():
 
 
 if __name__ == '__main__':
-    # Permite ejecutar directamente: python bot/app.py
+    # Permite Ejecutar Directamente el Módulo Python: python bot/app.py
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)

@@ -1,42 +1,44 @@
-# Rouss_Bot_Goggle_Sheets_Whatsapp
+# Rouss_Bot_Goggle_Sheets_Whatsapp.-
 
-Bot para Cliente Rouss usando Google Sheets, Python y Meta WhatsApp.
+Bot para Cliente Rouss Usando Google Sheets, Python y Meta WhatsApp.-
 
-## Archivos incluidos
-- `app.py` - Flask/ASGI app que expone el webhook para WhatsApp.
-- `worker.py` - Entrypoint para el Background Worker que ejecuta el scheduler (no correr en Gunicorn).
-- `sheets/credentials.json` - NO INCLUIR en el repo. Subir como Secret File en Render o usar GitHub Secrets.
-- `.env.example` - Variables de entorno necesarias (no contiene valores reales).
-- `Dockerfile` - Imagen para producción (usada por Render).
-- `render.yaml` - Declaración de servicios (web + worker) para Render (opcional).
+## Archivos Incluídos.-
+- `app.py`                  - Flask/ASGI app que Expone el Webhook para WhatsApp.-
+- `worker.py`               - Entrypoint para el Background Worker que Ejecuta el scheduler ( Nó Correr en Gunicorn ).-
+- `sheets/credentials.json` - Nó INCLUIR en el Repo, Subir Como Secret File en Render o Usar GitHub Secrets.-
+- `.env.example`            - Variables de Entorno Necesarias ( Nó Contiene Valores  Reales ).-
+- `Dockerfile`              - Imagen para Producción ( Usada por Render ).-
+- `render.yaml`             - Declaración de Servicios ( WEB + Worker ) para Render ( Opcional ).-
 
-## Variables de entorno (ejemplo)
-Define en Render Dashboard (Environment -> Environment Variables) o en tu entorno local usando `.env` (solo para desarrollo):
+## Variables de Entorno ( Ejemplo ).-
+Define en Render Dashboard ( Environment -> Environment Variables) o en Tú Entorno Local Usando `.env` ( Sólo Para Desarrollo ):
 
 - `WHATSAPP_ACCESS_TOKEN`
 - `WHATSAPP_PHONE_NUMBER_ID`
 - `WEBHOOK_VERIFY_TOKEN`
 - `SPREADSHEET_ID`
-- `GOOGLE_CREDENTIALS_PATH` (por ejemplo `/app/sheets/credentials.json`)
+- `GOOGLE_CREDENTIALS_PATH` ( Por Ejemplo `/app/sheets/credentials.json` ).-
 - `FLASK_ENV=production`
 
-## Cómo subir secretos a Render
-1. En tu servicio → Environment → Secret Files -> subir `credentials.json` y montarlo en `/app/sheets/credentials.json`.
-2. Añadir las Environment Variables en la sección Environment del servicio.
+## Cómo Subir Secretos a Render.-
+1. En El Servicio → Environment → Secret Files -> Subir `credentials.json` y Montarlo en: `/app/sheets/credentials.json`.-
+2. Añadir las Environment Variables en lá Sección Environment del Servicio.-
 
-## Ejecutar localmente (desarrollo)
-1. Copiar `.env.example` a `.env` y completar valores (NO subir `.env` al repo).
-2. Instalar dependencias: `pip install -r requirements.txt`
-3. Ejecutar la app (ejemplo):
+## Ejecutar Localmente ( Desarrollo ).-
+1. Copiar `.env.example` a `.env` y Completar Valores ( Nó Subir `.env` al Repo ).-
+2. Instalar Dependencias: `pip install -r requirements.txt`
+3. Ejecutar la App ( Ejemplo ):
    ```bash
    export FLASK_ENV=development
    flask run --host=0.0.0.0 --port=5000
    ```
-4. Para probar el worker localmente:
+4. Para Probar el Worker Localmente:
    ```bash
    python worker.py
    ```
 
-## Notas de seguridad
-- Nunca subir `credentials.json` ni `.env` con valores reales al repo.
-- Si accidentalmente subiste secrets: rota las claves inmediatamente.
+## Notas de Seguridad.-
+- Nunca Subir `credentials.json` ní `.env` con Valores Reales al Repo.-
+- Si Accidentalmente sé Subieron Secrets: Rotar las Claves Inmediatamente.-
+
+
