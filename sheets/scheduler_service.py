@@ -42,7 +42,7 @@ from googleapiclient.errors import HttpError
 
 # Importamos Funciones de sheet_service ( Lectura / Actualización ).-
 # Asegurarse que sheets/sheet_service.py Nó Importe iniciar_scheduler al Importar Datos.-
-from sheets.sheet_service import read_sheet, update_row, append_row, tz
+from sheets.sheet_service import read_sheet, update_row, append_row, tz, actualizar_calendario_dia
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,16 @@ def confirmar_reserva(reservation_id):
                     row[7] = datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
                     row[10] = 'FALSE'
                     update_row(i, row)
+                    # Actualizar Calendario Visual, Pestaña: Rouss_Turnos_Calendario_Visual.-
+                    try:
+                        fecha_turno = row[4]  # Fecha del Turno
+                        actualizar_calendario_dia(fecha_turno)
+                        logger.info(f"Calendario Actualizado para Fecha: {fecha_turno}")
+                    except Exception as e:
+                        logger.error(f"ERROR al Actualizar Calendario: {e}")
+
                     return True
+
         except Exception as e:
             logger.exception(f"ERROR: al Confirmar Reserva del Turno, en Fila {i}: {e}")
             return False

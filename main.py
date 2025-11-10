@@ -58,7 +58,7 @@ if __name__ == '__main__':
     # Iniciar scheduler SOLO si no estamos en el proceso de reload de Flask
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
         print("⏰ Iniciando Scheduler de Reservas...")
-        iniciar_scheduler(interval_seconds=10)
+        iniciar_scheduler(interval_seconds=30)  # Cada 30 Segundos en lugar de 10 Segundos.-
 
     # Ejecutar Flask sin debug para producción
     # Para PROBAR y ver logs detallados

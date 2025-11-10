@@ -33,6 +33,7 @@ Gestiona Lectura, Escritura y Actualización de Turnos.-
 """
 
 import logging
+
 logger = logging.getLogger(__name__)
 import os
 from pathlib import Path
@@ -48,8 +49,12 @@ HERE = Path(__file__).resolve().parent
 SERVICE_ACCOUNT_FILE = HERE / 'credentials.json'
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+
 SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '1zEUerYZ20wk1fgh1s1kse_eDb4SRxptFPgesAHKrPDw')
+
+# Nombre de la Pestaña Principal.-
 SHEET_NAME = 'Rouss_Turnos_Coiffeur'
+
 TIMEZONE = 'America/Argentina/Buenos_Aires'
 
 # Verificación: Archivo de Credenciales Presente.-
@@ -61,6 +66,7 @@ creds = service_account.Credentials.from_service_account_file(
     str(SERVICE_ACCOUNT_FILE), scopes=SCOPES)
 service = build('sheets', 'v4', credentials=creds)
 sheets = service.spreadsheets()
+
 tz = pytz.timezone(TIMEZONE)
 
 # Normalizar Nombre de Hoja.-
@@ -84,13 +90,13 @@ try:
     titles = _get_sheet_titles(SPREADSHEET_ID)
 except Exception as e:
     # Si Nó Podemos Obtener Títulos por un Fallo en la API, Marcamos como Nó Disponible.-
-    print("ERROR: La Base De Datos Nó está Disponible, Reintente Nuevamente, Gracias.-")
+    print("ERROR: La Hoja de Cálculo Nó está Disponible, Reintente Nuevamente, Gracias.-")
     print(f"(DEBUG) ERROR: Al Obtener Pestañas: {repr(e)}")
     DATA_AVAILABLE = False
 else:
     if SHEET_NAME not in titles:
         # Mensaje Amigable Solicitado por el Cliente.-
-        print("ERROR: La Base De Datos Nó está Disponible, Reintente Nuevamente, Gracias.-")
+        print("ERROR: La Hoja de Cálculo Nó está Disponible, Reintente Nuevamente, Gracias.-")
         # Log adicional opcional para debugging:
         print(f"(DEBUG) Pestañas Disponibles: {titles}")
         DATA_AVAILABLE = False
@@ -108,7 +114,7 @@ def _safe_range(sheet_name, a1_range):
 def append_row(values):
     """Agrega una Fila al Final de la Hoja"""
     if not DATA_AVAILABLE:
-        print("La Base De Datos Nó Está Disponible, Reintente Nuevamente, Gracias.-")
+        print("La Hoja de Cálculo Nó Está Disponible, Reintente Nuevamente, Gracias.-")
         return None
 
     body = {'values': [values]}
@@ -131,7 +137,7 @@ def append_row(values):
 def read_sheet(range_a1=None):
     """Lee Datos de la Hoja"""
     if not DATA_AVAILABLE:
-        print("La Base De Datos Nó Está Disponible, Reintente Nuevamente, Gracias.-")
+        print("La Hoja de Cálculo Nó Está Disponible, Reintente Nuevamente, Gracias.-")
         return []  # Lectura Nó Destructiva: Devolvemos Lista Vacía.-
 
     if not range_a1:
@@ -153,7 +159,7 @@ def read_sheet(range_a1=None):
 def update_row(row_index, values):
     """Actualiza una Fila Específica ( row_index Empieza en 2 )"""
     if not DATA_AVAILABLE:
-        print("La Base De Datos Nó Está Disponible, Reintente Nuevamente, Gracias.-")
+        print("La Hoja de Cálculo Nó Está Disponible, Reintente Nuevamente, Gracias.-")
         return None
 
     body = {'values': [values]}
@@ -177,7 +183,7 @@ def get_available_slots(coiffeur, fecha):
     Obtiene Horarios Disponibles para un Coiffeur en una Fecha Específica.-
 
     Args:
-        coiffeur: 'Walter' o 'María'
+        Coiffeur: 'Walter' o 'María'
         fecha: string en formato 'YYYY-MM-DD'
 
     Returns:
@@ -229,7 +235,7 @@ def check_availability(coiffeur, fecha, hora):
 
 def elegir_coiffeur(preferencia, fecha, hora):
     """
-    Elige el oiffeur Según Preferencia y Disponibilidad.-
+    Elige el Coiffeur Según Preferencia y Disponibilidad.-
 
     Args:
         preferencia: 'walter', 'maría', 'maria' o None
@@ -269,12 +275,146 @@ def elegir_coiffeur(preferencia, fecha, hora):
     else:
         return None
 
+
+def actualizar_calendario_dia(fecha):
+    """
+    Genera o Actualiza el Calendario Visual Completo para una Fecha Específica.-
+    Muestra TODOS los Horarios del Día (09:00 a 18:30) con Estado Libre/Ocupado.-
+
+    Args:
+        fecha: Fecha en formato 'YYYY-MM-DD'
+    """
+    CALENDARIO_SHEET = 'Rouss_Turnos_Calendario_Visual'
+
+    # Horarios del Salón (cada 30 minutos).-
+    horarios = [
+        '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+        '12:00', '12:30', '13:00', '14:00', '14:30', '15:00',
+        '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30'
+    ]
+
+    try:
+        # Leer Turnos Confirmados con Reintentos.-
+        max_intentos = 3
+        for intento in range(max_intentos):
+            try:
+                data = read_sheet()
+                break
+            except Exception as e:
+                if intento < max_intentos - 1:
+                    logger.warning(f"Intento {intento + 1}/{max_intentos} fallido al leer sheet: {e}")
+                    import time
+                    time.sleep(2)  # Esperar 2 segundos antes de reintentar
+                else:
+                    raise
+
+        # Crear Diccionario: {hora: {walter: nombre, maria: nombre}}.-
+        turnos_del_dia = {}
+        for row in data:
+            if len(row) >= 7 and row[4] == fecha and row[6] == 'Confirmado':
+                hora = row[5]
+                coiffeur = row[3]
+                nombre = row[0]
+                servicio = row[2]
+
+                if hora not in turnos_del_dia:
+                    turnos_del_dia[hora] = {'Walter': 'Libre', 'María': 'Libre', 'detalles': ''}
+
+                turnos_del_dia[hora][coiffeur] = nombre
+
+                # Agregar a Detalles.-
+                if turnos_del_dia[hora]['detalles']:
+                    turnos_del_dia[hora]['detalles'] += f" | {nombre} - {servicio}"
+                else:
+                    turnos_del_dia[hora]['detalles'] = f"{nombre} - {servicio}"
+
+        # Generar Filas del Calendario.-
+        filas_calendario = []
+        for hora in horarios:
+            if hora in turnos_del_dia:
+                fila = [
+                    fecha,
+                    hora,
+                    turnos_del_dia[hora]['Walter'],
+                    turnos_del_dia[hora]['María'],
+                    turnos_del_dia[hora]['detalles']
+                ]
+            else:
+                fila = [fecha, hora, 'Libre', 'Libre', '']
+
+            filas_calendario.append(fila)
+
+            # Líneas de Debug:
+            logger.info(f"(DEBUG) Fecha: {fecha}, Turnos Encontrados: {len(turnos_del_dia)}, Filas Calendario: {len(filas_calendario)}")
+            logger.info(f"(DEBUG) Primeras 3 filas: {filas_calendario[:3]}")
+
+        # Escribir en el Calendario (Sobrescribir Todo el Bloque de Esta Fecha).-
+        # Buscar Primera Fila Disponible o Actualizar si Ya Existe.-
+        try:
+            full_range = _safe_range(CALENDARIO_SHEET, 'A2:E1000')
+            result = sheets.values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range=full_range
+            ).execute()
+            filas_existentes = result.get('values', [])
+        except:
+            filas_existentes = []
+
+        # Buscar si Ya Existe Esta Fecha.-
+        inicio_fecha = None
+        for idx, fila in enumerate(filas_existentes):
+            if len(fila) >= 1 and fila[0] == fecha:
+                inicio_fecha = idx + 2  # +2 Porque Empieza en Fila 2.-
+                break
+
+        if inicio_fecha:
+            # Actualizar Filas Existentes ( 19 Horarios Exactos ).-
+            fin_fecha = inicio_fecha + 18  # Son 19 Horarios (0-18), por eso +18.-
+            update_range = _safe_range(CALENDARIO_SHEET, f'A{inicio_fecha}:E{fin_fecha}')
+            body = {'values': filas_calendario}
+            sheets.values().update(
+                spreadsheetId=SPREADSHEET_ID,
+                range=update_range,
+                valueInputOption='USER_ENTERED',
+                body=body
+            ).execute()
+            logger.info(f"Calendario Actualizado para Fecha: {fecha}")
+        else:
+            # Insertar Nueva Fecha al Principio (Después de Encabezados).-
+            # Primero Leer Todas las Filas Existentes para Nó Borrarlas.-
+            todas_las_filas = filas_calendario + [[''] * 5]  # Nueva fecha + Fila en Blanco (Lista Plana)
+
+            # Agregar Fechas Existentes Después.-
+            todas_las_filas.extend(filas_existentes)
+
+            # Escribir Todo Junto.-
+            total_filas = len(todas_las_filas)
+            write_range = _safe_range(CALENDARIO_SHEET, f'A2:E{1 + total_filas}')
+            body = {'values': todas_las_filas}
+            sheets.values().update(
+                spreadsheetId=SPREADSHEET_ID,
+                range=write_range,
+                valueInputOption='USER_ENTERED',
+                body=body
+            ).execute()
+            logger.info(
+                f"Calendario Creado para Nueva Fecha: {fecha} ( Preservando {len(filas_existentes)} Filas Anteriores...)")
+
+            logger.info(f"(DEBUG) Total de Filas Escritas: {total_filas}, Rango: {write_range}")
+
+        return True
+
+    except HttpError as e:
+        logger.error(f"ERROR: al Actualizar Calendario con Horarios: {e}")
+        return False
+
+
 # ------------------------------------------------------------------
 # Pequeño "smoke test" Local para Verificar Acceso a la Hoja de Cálculo.-
 # Ejecutar Sólo Sí sé Quiere Probar Manualmente: python -m sheets.sheet_service
 # ------------------------------------------------------------------
 def smoke_test_read():
-    """Lee Unas Filas y Muestra Cuántas Devolvió la API ( Prueba de Sólo Lectura )"""
+    """Lee Unas Filas y Muestra Cuántas Devolvió la API (Prueba de Solo Lectura)"""
     try:
         values = read_sheet('A1:K10')  # lectura conservadora
         print("SmokeTest: Lectura OK. Filas Devueltas:", len(values))

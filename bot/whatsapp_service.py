@@ -54,6 +54,7 @@ if not PHONE_NUMBER_ID:
 WHATSAPP_API_URL = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
 
 
+
 def send_message(to_phone, message):
     """
     Envía un mensaje de texto a un número de WhatsApp
@@ -84,8 +85,7 @@ def send_message(to_phone, message):
         print(f"Token: {WHATSAPP_TOKEN[:20]}...")
         print(f"Phone ID: {PHONE_NUMBER_ID}")
         print(f"URL: {WHATSAPP_API_URL}")
-        print(f"Headers: {headers}")
-        print(f"Payload: {payload}")
+        print(f"To: {to_phone}")
         print(f"==================\n")
 
         response = requests.post(WHATSAPP_API_URL, headers=headers, json=payload)
@@ -94,12 +94,26 @@ def send_message(to_phone, message):
         return True
     except requests.exceptions.RequestException as e:
         logger.error(f"ERROR al Enviar Mensaje a: {to_phone}: {e}")
+
+        # AGREGAR: Manejo específico del error 131030
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_data = e.response.json()
+                error_code = error_data.get('error', {}).get('code')
+                error_msg = error_data.get('error', {}).get('message', '')
+
+                if error_code == 131030:
+                    print(f"\n⚠️  ATENCIÓN: El número {to_phone} NO está en la lista de permitidos")
+                    print(f"    👉 Solución: Agregar el número en Meta for Developers")
+                    print(f"    📱 URL: https://developers.facebook.com/apps\n")
+            except:
+                pass
+
         print(f"\n=== ERROR DETALLADO ===")
         print(f"Tipo de ERROR: {type(e).__name__}")
         print(f"Mensaje: {str(e)}")
         if hasattr(e, 'response') and e.response is not None:
             print(f"Status: {e.response.status_code}")
-            print(f"Headers respuesta: {e.response.headers}")
             print(f"Body: {e.response.text}")
         else:
             print(f"Response: None ( ERROR: de Conexión o Solicitud Malformada...)")
@@ -154,6 +168,20 @@ def send_list_message(to_phone, body_text, button_text, sections):
 
     except requests.exceptions.RequestException as e:
         logger.error(f"ERROR al Enviar Lista a {to_phone}: {e}")
+
+        # Manejo específico del error 131030
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_data = e.response.json()
+                error_code = error_data.get('error', {}).get('code')
+
+                if error_code == 131030:
+                    print(f"\n⚠️  ATENCIÓN: El número {to_phone} NO está en la lista de permitidos")
+                    print(f"    👉 Solución: Agregar el número en Meta for Developers")
+                    print(f"    📱 URL: https://developers.facebook.com/apps\n")
+            except:
+                pass
+
         print(f"\n=== ERROR DETALLADO ( LIST ) ===")
         print(f"Tipo de ERROR: {type(e).__name__}")
         print(f"Mensaje: {str(e)}")
@@ -164,5 +192,6 @@ def send_list_message(to_phone, body_text, button_text, sections):
             print(f"Response: None ( ERROR: de Conexión o Solicitud Malformada...)")
         print(f"==============================\n")
         return False
+
 
 
