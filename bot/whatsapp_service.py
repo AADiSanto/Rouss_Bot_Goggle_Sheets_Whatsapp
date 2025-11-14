@@ -1,29 +1,17 @@
+# -*- coding: utf-8 -*-
 # *********************************************************************************************************************
 #  Created By: Ing. Antonio Alberto Di Santo.-
 #  Created On: Lunes 06 de Octubre del 2025.-
 #
-#     Program: Bot de WhatsApp con Google Sheets,
-#                 para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
+#     Program       :   Bot de WhatsApp con Google Sheets,
+#                          para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
 #
-# *********************************************************************************************************************
+#    "Module Purpose:   Servicio de Comunicación con WhatsApp Cloud API.-
+#                       Gestiona el Envío de Mensajes de Texto y Listas Interactivas a través de la API
+#                       de WhatsApp Business. Implementa Autenticación mediante Token, Manejo de Errores
+#                       Específicos ( Código 131030 para Números No Autorizados ), Logging Detallado de
+#                       Operaciones, y Validación de Credenciales de Configuración.-
 #
-#  *** Python v3.13.6
-#
-#  *** Compilar en el Directorio del Programa desde PowerShell como Administrador ( Nó es Necesario ).-
-#
-#  ***     pyinstaller --onefile --noconsole Transistor_MosFET_Parámetros_Curva_Trabajo.py
-#
-#          Para Incluír un ícono en el .exe:
-#
-#          Buscar el Icono en: https://www.svgrepo.com/
-#
-#             Guardarlo como .svg
-#
-#          Luego Converirlo de .svg a .ico en: https://convertico.com/es/svg-a-ico/
-#
-#  ***     pyinstaller --onefile --icon=MosFET.ico Transistor_MosFET_Parámetros_Curva_Trabajo.py
-#
-#  ***        El .exe Compilado Estará Dentro de la Carpeta "dist".-
 #
 # *********************************************************************************************************************
 
@@ -31,7 +19,6 @@
 Servicio de Comunicación con WhatsApp Cloud API
 Envía y Procesa Mensajes.-
 """
-
 import requests
 import os
 import logging
@@ -54,10 +41,10 @@ if not PHONE_NUMBER_ID:
 WHATSAPP_API_URL = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
 
 
-
+#Envía un Mensaje de Texto a un Número de WhatsApp.-
 def send_message(to_phone, message):
     """
-    Envía un mensaje de texto a un número de WhatsApp
+    Envía un Mensaje de Texto a un Número de WhatsApp
 
     Args:
         to_phone: Número con código de país (ej: +5491122233344)
@@ -95,7 +82,7 @@ def send_message(to_phone, message):
     except requests.exceptions.RequestException as e:
         logger.error(f"ERROR al Enviar Mensaje a: {to_phone}: {e}")
 
-        # AGREGAR: Manejo específico del error 131030
+        # AGREGAR: Manejo específico del ERROR: 131030
         if hasattr(e, 'response') and e.response is not None:
             try:
                 error_data = e.response.json()
@@ -103,8 +90,8 @@ def send_message(to_phone, message):
                 error_msg = error_data.get('error', {}).get('message', '')
 
                 if error_code == 131030:
-                    print(f"\n⚠️  ATENCIÓN: El número {to_phone} NO está en la lista de permitidos")
-                    print(f"    👉 Solución: Agregar el número en Meta for Developers")
+                    print(f"\n⚠️  ATENCIÓN: El Número {to_phone} NO está en la Lista de Permitidos...")
+                    print(f"    👉 Solución: Agregar el Número en Meta for Developers...")
                     print(f"    📱 URL: https://developers.facebook.com/apps\n")
             except:
                 pass
@@ -121,9 +108,10 @@ def send_message(to_phone, message):
         return False
 
 
+#Envía un Mensaje con Lista Interactiva (Para Horarios Disponibles).-
 def send_list_message(to_phone, body_text, button_text, sections):
     """
-    Envía un mensaje con lista interactiva (para horarios disponibles)
+    Envía un Mensaje con Lista Interactiva (Para Horarios Disponibles)
 
     Args:
         to_phone: Número destinatario
@@ -176,8 +164,8 @@ def send_list_message(to_phone, body_text, button_text, sections):
                 error_code = error_data.get('error', {}).get('code')
 
                 if error_code == 131030:
-                    print(f"\n⚠️  ATENCIÓN: El número {to_phone} NO está en la lista de permitidos")
-                    print(f"    👉 Solución: Agregar el número en Meta for Developers")
+                    print(f"\n⚠️  ATENCIÓN: El Número {to_phone} NO está en la Lista de Permitidos...")
+                    print(f"    👉 Solución: Agregar el Número en Meta for Developers...")
                     print(f"    📱 URL: https://developers.facebook.com/apps\n")
             except:
                 pass
@@ -192,6 +180,5 @@ def send_list_message(to_phone, body_text, button_text, sections):
             print(f"Response: None ( ERROR: de Conexión o Solicitud Malformada...)")
         print(f"==============================\n")
         return False
-
 
 

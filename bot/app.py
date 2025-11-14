@@ -3,28 +3,16 @@
 #  Created By: Ing. Antonio Alberto Di Santo.-
 #  Created On: Lunes 06 de Octubre del 2025.-
 #
-#     Program: Bot de WhatsApp con Google Sheets,
-#                 para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
+#     Program       :   Bot de WhatsApp con Google Sheets,
+#                          para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
 #
-# *********************************************************************************************************************
+#    "Module Purpose:   Servidor Flask Principal - Gestión del Webhook de WhatsApp.-
+#                       Maneja la Recepción y Procesamiento de Mensajes Entrantes, Implementa el Flujo
+#                       Conversacional Completo para Reserva de Turnos ( Selección de Coiffeur, Nombre,
+#                       Servicio, Fecha y Hora ), Valida Disponibilidad en Tiempo Real, Crea Reservas
+#                       Provisionales con Timeout de 60 Segundos, y Gestiona la Confirmación Final de Turnos.
+#                       Mantiene el Estado de Conversaciones de Múltiples Usuarios Simultáneos.-
 #
-#  *** Python v3.13.6
-#
-#  *** Compilar en el Directorio del Programa desde PowerShell como Administrador ( Nó es Necesario ).-
-#
-#  ***     pyinstaller --onefile --noconsole Transistor_MosFET_Parámetros_Curva_Trabajo.py
-#
-#          Para Incluír un ícono en el .exe:
-#
-#          Buscar el Icono en: https://www.svgrepo.com/
-#
-#             Guardarlo como .svg
-#
-#          Luego Converirlo de .svg a .ico en: https://convertico.com/es/svg-a-ico/
-#
-#  ***     pyinstaller --onefile --icon=MosFET.ico Transistor_MosFET_Parámetros_Curva_Trabajo.py
-#
-#  ***        El .exe Compilado Estará Dentro de la Carpeta "dist".-
 #
 # *********************************************************************************************************************
 
@@ -69,8 +57,9 @@ VERIFY_TOKEN = os.getenv('WEBHOOK_VERIFY_TOKEN')
 # Diccionario para Mantener Estado de Conversaciones ( En Producción Usar Redis / DB ).-
 conversations = {}
 
-
 @app.route('/webhook', methods=['GET'])
+
+#Verificación del webhook por Parte de Meta.-
 def verify_webhook():
     """Verificación del webhook por Parte de Meta"""
     mode = request.args.get('hub.mode')
@@ -84,6 +73,8 @@ def verify_webhook():
 
 
 @app.route('/webhook', methods=['POST'])
+
+#Recibe Mensajes Entrantes de WhatsApp.-
 def receive_message():
     """Recibe Mensajes Entrantes de WhatsApp"""
     try:
@@ -133,6 +124,7 @@ def receive_message():
         return 'OK', 200
 
 
+#Procesa Mensajes de Texto Según el Estado de la Conversación.-
 def process_text_message(sender, text):
     """Procesa Mensajes de Texto Según el Estado de la Conversación"""
     text_lower = text.lower()
@@ -156,11 +148,11 @@ def process_text_message(sender, text):
         # Selección de Coiffeur.-
         if 'walter' in text_lower:
             state['coiffeur'] = 'Walter'
-            send_message(sender, "Perfecto, Elegiste a Walter.\n\n¿Cuál es Tú Nombre?")
+            send_message(sender, "Perfecto, Elegiste a Walter.\n\n¿Cuál es Tú Nombre?:")
             state['step'] = 1.5
         elif 'maría' in text_lower or 'maria' in text_lower:
             state['coiffeur'] = 'María'
-            send_message(sender, "Perfecto, Elegiste a María.\n\n¿Cuál es Tú Nombre?")
+            send_message(sender, "Perfecto, Elegiste a María.\n\n¿Cuál es Tú Nombre?:")
             state['step'] = 1.5
         else:
             send_message(sender, "No Entendí Tú Respuesta. Por Favor Escribí 'Walter' o 'María'...")
@@ -170,7 +162,7 @@ def process_text_message(sender, text):
         state['nombre'] = text.strip()
         state['telefono'] = sender
         send_message(sender,
-                     f"Gracias {state['nombre']}. ¿Qué Servicio Necesitás?\n\n✂️ Color\n🎨 Corte\n💇 Peinado")
+                     f"Gracias {state['nombre']}. ¿Qué Servicio Necesitás?:\n\n🎨 Color\n✂️ Corte\n💇 Peinado")
         state['step'] = 2
 
     elif step == 2:
@@ -222,6 +214,13 @@ def process_text_message(sender, text):
             fecha_formatted = fecha_obj.strftime('%Y-%m-%d')
             state['fecha'] = fecha_formatted
             state['fecha_display'] = text
+
+            # --- Control de Días Nó Laborables o Feriados ---
+            from sheets.sheet_service import es_feriado
+            if es_feriado(fecha_formatted):
+                send_message(sender,
+                             f"⚠️ Lo Siento, El Salón Permanece Cerrado el {text} por Día Nó Laborable o Feriado.\n\nPor Favor Elegí Otra Fecha Disponible, Gracias...")
+                return
 
             # Obtener Horarios Disponibles para la Fecha del Turno Elegida por el Cliente,.
             horarios = get_available_slots(state['coiffeur'], fecha_formatted)
@@ -313,15 +312,19 @@ def process_text_message(sender, text):
         return
 
 
+#Procesa Respuestas de Mensajes Interactivos ( Listas, Botones ).-
 def process_interactive_response(sender, selected_id):
-    """Procesa respuestas de mensajes interactivos (listas, botones)"""
+    """Procesa Respuestas de Mensajes Interactivos (Listas, Botones)"""
     # Implementar Lógica Para Mensajes Interactivos Si Sé Usan.-
     pass
 
 
 @app.route('/health', methods=['GET'])
+
+
+#EndPoint de Health Check Para el Servidor.-
 def health_check():
-    """Endpoint de health check para el servidor"""
+    """EndPoint de Health Check Para el Servidor"""
     return jsonify({"status": "healthy"}), 200
 
 
@@ -329,3 +332,5 @@ if __name__ == '__main__':
     # Permite Ejecutar Directamente el Módulo Python: python bot/app.py
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
+
+

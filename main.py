@@ -1,9 +1,16 @@
+# -*- coding: utf-8 -*-
 # *********************************************************************************************************************
 #  Created By: Ing. Antonio Alberto Di Santo.-
 #  Created On: Lunes 06 de Octubre del 2025.-
 #
-#     Program: Bot de WhatsApp con Google Sheets,
-#                 para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
+#     Program       :   Bot de WhatsApp con Google Sheets,
+#                          para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
+#
+#    "Module Purpose:   Punto de Entrada Principal del Bot de WhatsApp para Gestión de Turnos.-
+#                       Inicializa el Servidor Flask en el Puerto Especificado, Configura el Scheduler
+#                       para Procesamiento Automático de Reservas cada 30 Segundos, y Ejecuta el Coloreo
+#                       Automático de Feriados en Google Sheets al Iniciar la Aplicación.-
+#
 #
 # *********************************************************************************************************************
 #
@@ -45,8 +52,12 @@ if not os.path.exists('logs'):
 # Importar la aplicación
 from bot.app import app
 
-# Importar scheduler
+# Importar Scheduler
 from sheets.scheduler_service import iniciar_scheduler
+from sheets.sheet_service import colorear_feriados
+
+# Importar Obtener Año Activo.-
+from sheets.sheet_service import set_active_spreadsheet, get_current_year
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
@@ -55,17 +66,32 @@ if __name__ == '__main__':
     print(f"📋 Webhook URL: http://localhost:{port}/webhook")
     print(f"❤️  Health Check: http://localhost:{port}/health")
 
-    # Iniciar scheduler SOLO si no estamos en el proceso de reload de Flask
+    # Iniciar scheduler SOLO sí nó Estamos en el Proceso de Reload de Flask.-
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
         print("⏰ Iniciando Scheduler de Reservas...")
-        iniciar_scheduler(interval_seconds=30)  # Cada 30 Segundos en lugar de 10 Segundos.-
+
+        # --------------------------------------------------------
+        # Configurar Hoja del Año Actual al Iniciar.-
+        # --------------------------------------------------------
+        try:
+            current_year = get_current_year()
+            set_active_spreadsheet(current_year)
+            print(f"📅 Hoja del Año {current_year} Configurada...")
+        except Exception as e:
+            print(f"⚠️  ERROR: al Configurar Hoja del Año: {e}")
+
+        # --------------------------------------------------------
+        # Colorear Hoja de Feriados Automáticamente al Iniciar.-
+        # --------------------------------------------------------
+        try:
+            colorear_feriados()
+            print("🎨 Coloreo Automático de Feriados Completado...")
+        except Exception as e:
+            print(f"⚠️  ERROR: al Colorear Feriados: {e}")
+
+        iniciar_scheduler(interval_seconds=30)
 
     # Ejecutar Flask sin debug para producción
-    # Para PROBAR y ver logs detallados
     app.run(host='0.0.0.0', port=port, debug=True)  # ✅ Usa True para desarrollo
-
-    # Para PRODUCCIÓN (cuando uses ngrok y conectes con WhatsApp)
-    #app.run(host='0.0.0.0', port=port, debug=False)  # ✅ Usa False para producción
-
 
 

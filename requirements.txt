@@ -1,3 +1,19 @@
+# *********************************************************************************************************************
+#  Created By: Ing. Antonio Alberto Di Santo.-
+#  Created On: Lunes 06 de Octubre del 2025.-
+#
+#     Program       :   Bot de WhatsApp con Google Sheets,
+#                          para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
+#
+#    "File Purpose:     Archivo de Dependencias del Proyecto.-
+#                       Lista todas las Librerías Python Requeridas para el Funcionamiento del Sistema:
+#                       Flask para el Servidor Web, Requests para Llamadas HTTP a WhatsApp API,
+#                       Google API Client para Integración con Google Sheets, APScheduler para
+#                       Tareas Programadas, Gunicorn/Uvicorn para Despliegue en Producción.-
+#
+#
+# *********************************************************************************************************************
+
 protobuf
 python-rest-client
 flask==3.0.0
@@ -11,4 +27,5 @@ pytz==2023.3
 APScheduler==3.10.4
 gunicorn==21.2.0
 uvicorn
+
 

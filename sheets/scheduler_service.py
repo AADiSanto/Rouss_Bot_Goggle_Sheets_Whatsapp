@@ -1,10 +1,14 @@
+# -*- coding: utf-8 -*-
 # *********************************************************************************************************************
 #  Created By: Ing. Antonio Alberto Di Santo.-
 #  Created On: Lunes 06 de Octubre del 2025.-
 #
-#     Program: Bot de WhatsApp con Google Sheets,
-#                 para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
+#     Program       :   Bot de WhatsApp con Google Sheets,
+#                          para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
 #
+#    "Module Purpose:   Gestiona la creación, confirmación y expiración automática de reservas temporales de turnos,
+#                       utilizando un scheduler en segundo plano para controlar tiempos límite y actualizar en Google Sheets."
+
 # *********************************************************************************************************************
 #
 #  *** Python v3.13.6
@@ -40,13 +44,13 @@ import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 from googleapiclient.errors import HttpError
 
-# Importamos Funciones de sheet_service ( Lectura / Actualización ).-
+# Importamos Funciones de sheet_service (Lectura / Actualización).-
 # Asegurarse que sheets/sheet_service.py Nó Importe iniciar_scheduler al Importar Datos.-
 from sheets.sheet_service import read_sheet, update_row, append_row, tz, actualizar_calendario_dia
 
 logger = logging.getLogger(__name__)
 
-# Tiempo por Defecto para Expiración de Reserva ( en Segundos ).-
+# Tiempo por Defecto para Expiración de Reserva (en Segundos).-
 RESERVA_SECONDS = 60
 
 # Scheduler Singleton para Evitar Múltiples Instancias en el Mismo Proceso.-
@@ -54,6 +58,7 @@ _SCHEDULER = None
 _JOB_ID = 'liberar_reservas_expiradas'
 
 
+#Crea una Reserva Temporal del Turno, con Expiración de RESERVA_SECONDS Segundos.-
 def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora):
     """
     Crea una Reserva Temporal del Turno, con Expiración de RESERVA_SECONDS Segundos.-
@@ -61,6 +66,21 @@ def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora)
     Returns:
         str: ReservationID único
     """
+    # Extraer Año de la Fecha y Configurar Hoja Activa.-
+    try:
+        year = int(fecha.split('-')[0])
+        from sheets.sheet_service import set_active_spreadsheet
+        set_active_spreadsheet(year)
+    except Exception as e:
+        logger.warning(f"No se pudo cambiar hoja para año en fecha {fecha}: {e}")
+
+    # --- CONTROL: Nó Permitir Turnos en Días Nó Laborables o Feriados ---
+    from sheets.sheet_service import es_feriado
+
+    if es_feriado(fecha):
+        logger.warning(f"Intento de Reserva en Fecha Nó Laborable o Feriado: {fecha}")
+        raise ValueError(f"❌ ERROR: Nó sé Pueden Agendar Turnos en Días Nó Laborables o Feriados ({fecha}).")
+
     reservation_id = str(uuid.uuid4())
     timestamp_reserva = (datetime.now(tz) + timedelta(seconds=RESERVA_SECONDS)).isoformat(sep=' ')
     fecha_registro = datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
@@ -83,6 +103,7 @@ def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora)
     return reservation_id
 
 
+#Confirma una Reserva Temporal del Turno y Actualiza Sú Estado.-
 def confirmar_reserva(reservation_id):
     """
     Confirma una Reserva Temporal del Turno y Actualiza Sú Estado.-
@@ -128,6 +149,7 @@ def confirmar_reserva(reservation_id):
     return False
 
 
+#Busca y Marca como Expiradas Las Reservas que Superaron el Tiempo Límite.-
 def liberar_reservas_expiradas():
     """
     Busca y Marca como Expiradas Las Reservas que Superaron el Tiempo Límite.-
@@ -156,10 +178,11 @@ def liberar_reservas_expiradas():
             continue
 
 
+#Inicia ( o Retorna ) el Scheduler de Tareas en Segundo Plano.-
 def iniciar_scheduler(interval_seconds: int = 6):
     """
-    Inicia ( o Retorna ) el scheduler de Tareas en Segundo Plano.-
-    - Evita Crear Múltiples schedulers en el Mismo Proceso ( singleton ).-
+    Inicia ( o Retorna ) el Scheduler de Tareas en Segundo Plano.-
+    - Evita Crear Múltiples Schedulers en el Mismo Proceso ( singleton ).-
     - Añade el Job ' liberar_reservas_expiradas ' con ' id ' para Prevenir Duplicados.-
     - Loguea el Módulo / Función que Solicitó el Inicio ( archivo:línea ).-
     - Por Defecto usa 6s para Testing; Pasár Otro Valor si sé Quiere Cambiarlo.-
@@ -192,17 +215,33 @@ def iniciar_scheduler(interval_seconds: int = 6):
         except Exception:
             logger.exception("(scheduler) ERROR: Comprobando scheduler Existente; sé Recreará...")
 
-    # Crear Nuevo scheduler.-
+    # Crear Nuevo Scheduler.-
     _SCHEDULER = BackgroundScheduler(timezone=tz.zone)
 
     # Agregar Job sí nó Existe.-
     if not _SCHEDULER.get_job(_JOB_ID):
         _SCHEDULER.add_job(liberar_reservas_expiradas, 'interval',
                            seconds=interval_seconds, id=_JOB_ID)
+
         logger.info(f"(scheduler) Job '{_JOB_ID}' Agregado al scheduler")
 
+    # -------------------------------------------------------------------------------------
+    # Nuevo Job: Actualiza Colores de Feriados Cada 05 Minutos (solo formato visual).-
+    # -------------------------------------------------------------------------------------
+    try:
+        from sheets.sheet_service import colorear_feriados
+
+        _SCHEDULER.add_job(colorear_feriados, 'interval',
+                           minutes=3, id='colorear_feriados')
+        logger.info(f"(scheduler) Job 'colorear_feriados' Agregado (cada 03 Minutos)...")
+
+    except Exception as e:
+        logger.error(f"(scheduler) ERROR: al Agregar Job colorear_feriados: {e}")
+
     _SCHEDULER.start()
+
     logger.info(f"(scheduler) Iniciado con Job id='{_JOB_ID}', Intervalo {interval_seconds}s, tz={tz.zone}")
+
     return _SCHEDULER
 
 
