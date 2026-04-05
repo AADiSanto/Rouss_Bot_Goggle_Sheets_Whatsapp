@@ -26,6 +26,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+SYSTEM_MODE = os.getenv("SYSTEM_MODE", "disabled").lower()
+
 logger = logging.getLogger(__name__)
 
 # Usar las Variables Correctas Desde .env.-
@@ -59,11 +61,19 @@ def send_message(to_phone, message):
         "Content-Type": "application/json"
     }
 
+    # Prefijo Según Modo Del Sistema.-
+    prefix = ""
+
+    if SYSTEM_MODE == "demo":
+        prefix = "💈 *MODO DEMO ACTIVO*\n\n"
+    elif SYSTEM_MODE == "disabled":
+        message = "⚠️ El Sistema Nó Está Disponible en éste Momento...\nPor Favor Comuníquese con el Soporte de MEMORY   Ingeniería en Sistemas.-\n Soporte@MEMORY.com.ar"
+
     payload = {
         "messaging_product": "whatsapp",
         "to": to_phone,
         "type": "text",
-        "text": {"body": message}
+        "text": {"body": prefix + message}
     }
 
     try:
@@ -128,13 +138,20 @@ def send_list_message(to_phone, body_text, button_text, sections):
         "Content-Type": "application/json"
     }
 
+    prefix = ""
+
+    if SYSTEM_MODE == "demo":
+        prefix = "💈 *MODO DEMO ACTIVO*\n\n"
+    elif SYSTEM_MODE == "disabled":
+        body_text = "⚠️ El Sistema Nó Está Disponible en éste Momento...\nPor Favor Comuníquese con el Soporte de MEMORY   Ingeniería en Sistemas.-\n Soporte@MEMORY.com.ar"
+
     payload = {
         "messaging_product": "whatsapp",
         "to": to_phone,
         "type": "interactive",
         "interactive": {
             "type": "list",
-            "body": {"text": body_text},
+            "body": {"text": prefix + body_text},
             "action": {
                 "button": button_text,
                 "sections": sections

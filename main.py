@@ -42,22 +42,29 @@ Inicializa el servidor Flask y el scheduler
 import os
 import sys
 
-# Agregar el directorio raíz al path para imports
+import logging
+logging.getLogger().handlers.clear()
+
+# Agregar el Directorio Raíz Al Path Para Imports.-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Crear carpeta de logs si no existe
+# Crear Carpeta De Logs Sí Nó Existe.-
 if not os.path.exists('logs'):
     os.makedirs('logs')
 
-# Importar la aplicación
+# Importar Lá Aplicación.-
 from bot.app import app
 
-# Importar Scheduler
+# Importar Scheduler.-
 from sheets.scheduler_service import iniciar_scheduler
 from sheets.sheet_service import colorear_feriados
 
 # Importar Obtener Año Activo.-
 from sheets.sheet_service import set_active_spreadsheet, get_current_year
+
+SYSTEM_MODE = os.getenv("SYSTEM_MODE", "disabled").lower()
+
+print(f"🚀 Sistema Iniciado en Modo: {SYSTEM_MODE.upper()}")
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
@@ -89,7 +96,9 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"⚠️  ERROR: al Colorear Feriados: {e}")
 
-        iniciar_scheduler(interval_seconds=30)
+        # Iniciar Scheduler ( Verificar Cada 10 Segundos... ).-
+        scheduler = iniciar_scheduler(interval_seconds=30)  # ← Cambiar de 10 a 30.-
+        print(f"⏰ Scheduler Iniciado - Job Activo: {scheduler.get_jobs()}")
 
     # Ejecutar Flask sin debug para producción
     app.run(host='0.0.0.0', port=port, debug=True)  # ✅ Usa True para desarrollo

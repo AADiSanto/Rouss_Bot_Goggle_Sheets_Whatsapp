@@ -39,26 +39,49 @@ Controla Expiración de Reservas de Turnos Temporales.-
 import inspect
 import logging
 import uuid
+
+import now
+
+from sheets.test_sheet import data
+
+# Diccionarios en Castellano.-
+DIAS = {
+    'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
+    'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'
+}
+
+MESES = {
+    'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo', 'April': 'Abril',
+    'May': 'Mayo', 'June': 'Junio', 'July': 'Julio', 'August': 'Agosto',
+    'September': 'Septiembre', 'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
+}
+
 from datetime import datetime, timedelta
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 from googleapiclient.errors import HttpError
 
+# Importamos Funciones de bot.app
+from bot.app import DIAS, MESES
+
 # Importamos Funciones de sheet_service (Lectura / Actualización).-
 # Asegurarse que sheets/sheet_service.py Nó Importe iniciar_scheduler al Importar Datos.-
-from sheets.sheet_service import read_sheet, update_row, append_row, tz, actualizar_calendario_dia
+from sheets.sheet_service import read_sheet, update_row, append_row, tz, actualizar_calendario_dia, \
+    validar_fecha_hora_turno
 
+import logging
+logging.getLogger().handlers.clear()
 logger = logging.getLogger(__name__)
 
 # Tiempo por Defecto para Expiración de Reserva (en Segundos).-
-RESERVA_SECONDS = 60
+RESERVA_SECONDS = 120  # ← Cambiar de 60 a 120 Segundos.-
 
 # Scheduler Singleton para Evitar Múltiples Instancias en el Mismo Proceso.-
 _SCHEDULER = None
 _JOB_ID = 'liberar_reservas_expiradas'
 
 
-#Crea una Reserva Temporal del Turno, con Expiración de RESERVA_SECONDS Segundos.-
+# Crea una Reserva Temporal del Turno, con Expiración de RESERVA_SECONDS Segundos.-
 def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora):
     """
     Crea una Reserva Temporal del Turno, con Expiración de RESERVA_SECONDS Segundos.-
@@ -66,44 +89,94 @@ def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora)
     Returns:
         str: ReservationID único
     """
+
+    # --------------------------------------------------
     # Extraer Año de la Fecha y Configurar Hoja Activa.-
+    # --------------------------------------------------
     try:
-        year = int(fecha.split('-')[0])
+        # Normalizar Fecha Sí Viene en Formato Largo Español.-
+        if ',' in fecha:
+            # Formato: "Miércoles, 26 de Noviembre de 2025"
+            partes = fecha.split(',')[1].strip().split(' ')
+            year = int(partes[4])
+        else:
+            # Formato ISO: "2025-11-26"
+            year = int(fecha.split('-')[0])
+
         from sheets.sheet_service import set_active_spreadsheet
         set_active_spreadsheet(year)
-    except Exception as e:
-        logger.warning(f"No se pudo cambiar hoja para año en fecha {fecha}: {e}")
 
-    # --- CONTROL: Nó Permitir Turnos en Días Nó Laborables o Feriados ---
+    except Exception as e:
+        logger.warning(f"Nó Sé Pudo Cambiar Hoja para Año en Fecha {fecha}: {e} ...")
+
+    # ----------------------------------------
+    # VALIDACIONES DEL NEGOCIO: Fecha y Hora.-
+    # ----------------------------------------
+    try:
+        validar_fecha_hora_turno(fecha, hora)
+    except ValueError as e:
+        raise ValueError(str(e))
+
+    # --------------------------------------------------------------
+    # CONTROL: Nó Permitir Turnos en Días Nó Laborables o Feriados.-
+    # --------------------------------------------------------------
     from sheets.sheet_service import es_feriado
 
     if es_feriado(fecha):
-        logger.warning(f"Intento de Reserva en Fecha Nó Laborable o Feriado: {fecha}")
-        raise ValueError(f"❌ ERROR: Nó sé Pueden Agendar Turnos en Días Nó Laborables o Feriados ({fecha}).")
+        logger.warning(f"Intento de Reserva en Fecha Nó Laborable o Feriado: {fecha} ...")
+        raise ValueError(
+            f"❌ ERROR: Nó sé Pueden Agendar Turnos en Días Nó Laborables o Feriados ({fecha}) ..."
+        )
 
+    # ----------------------------------------------------
+    # Generar Identificador Único de la Reserva Temporal.-
+    # ----------------------------------------------------
     reservation_id = str(uuid.uuid4())
-    timestamp_reserva = (datetime.now(tz) + timedelta(seconds=RESERVA_SECONDS)).isoformat(sep=' ')
-    fecha_registro = datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
 
+    # Timestamp de Expiración (Guardado Como Texto en la Hoja).-
+    ts_expira = (datetime.now(tz) + timedelta(seconds=RESERVA_SECONDS)).isoformat(sep=' ')
+
+    # ----------------------------------------------------
+    # Fecha Registro en Castellano (Momento de Creación).-
+    # ----------------------------------------------------
+    now = datetime.now(tz)
+    dia_ing = now.strftime('%A')
+    mes_ing = now.strftime('%B')
+
+    dia_esp = DIAS[dia_ing]
+    mes_esp = MESES[mes_ing]
+
+    fecha_registro = (
+        f"{dia_esp}, {now.day} de {mes_esp} de "
+        f"{now.year} {now.strftime('%H:%M:%S')}"
+    )
+
+    # ----------------------------------------------
+    # Fila Completa Para Insertar en Google Sheets.-
+    # ----------------------------------------------
     values = [
-        nombre,
-        telefono,
-        servicio,
-        coiffeur,
-        fecha,
-        hora,
-        'Pendiente',
-        fecha_registro,
-        reservation_id,
-        timestamp_reserva,
-        'TRUE'
+        nombre,            # A
+        telefono,          # B
+        servicio,          # C
+        coiffeur,          # D
+        fecha,             # E
+        hora,              # F
+        'Pendiente',       # G
+        'TRUE',            # H ← Activo
+        '',                # I - Valor_del_Servicio
+        '',                # J - SubTOTALES
+        fecha_registro,    # K
+        reservation_id,    # L
+        ts_expira          # M - Expira
     ]
 
+    # Escritura en Google Sheets.-
     append_row(values)
+
     return reservation_id
 
 
-#Confirma una Reserva Temporal del Turno y Actualiza Sú Estado.-
+# Confirma una Reserva Temporal del Turno y Actualiza Sú Estado.-
 def confirmar_reserva(reservation_id):
     """
     Confirma una Reserva Temporal del Turno y Actualiza Sú Estado.-
@@ -111,68 +184,221 @@ def confirmar_reserva(reservation_id):
     Returns:
         bool: True Sí Sé Confirmó Exitosamente, False Sí Nó Sé Encontró o Expiró.-
     """
-    data = read_sheet()
-    now = datetime.now(tz)
 
-    for i, row in enumerate(data, start=2):
-        try:
-            if len(row) >= 11 and row[8] == reservation_id:
-                # Verificar si no expiró
-                # row[9] es el timestamp de expiración (string)
-                ts = datetime.fromisoformat(row[9])
-                if ts < now:
-                    # Ya expiró
-                    row[6] = 'Expirada'
-                    row[10] = 'FALSE'
-                    update_row(i, row)
+    import socket
+    logger.info(f"🔍 Iniciando Confirmación de Reserva {reservation_id} ...")
+
+    # -------------------------------------------------------------------
+    # LECTURA SEGURA DE LA HOJA.-
+    # -------------------------------------------------------------------
+    try:
+        socket.setdefaulttimeout(30)
+        data = read_sheet()
+    except Exception as e:
+        logger.error(f"❌ ERROR: al Leer Google Sheets: {e} ...")
+        return False
+    finally:
+        socket.setdefaulttimeout(None)
+
+    ahora_confirmación = datetime.now(tz)
+
+    # -------------------------------------------------------------------------------
+    # 1) BUSCAR TODAS LAS FILAS QUE COINCIDAN CON EL reservation_id (1 sola pasada).-
+    # -------------------------------------------------------------------------------
+    filas_encontradas = [
+        (i, row) for i, row in enumerate(data, start=2)
+        if len(row) >= 13 and row[11] == reservation_id
+    ]
+
+    # Sí Nó Hay Ninguna Fila → Nó Existe.-
+    if not filas_encontradas:
+        logger.warning(f"⚠️ Reserva {reservation_id} Nó Encontrada en Ninguna Fila...")
+        return False
+
+    # Sólo Debe Existir Una Fila, Sí Hubiera Más, Igual Tomamos La Primera.-
+    i, row = filas_encontradas[0]
+    logger.info(f"📍 Fila Encontrada para Confirmación: {i} ...")
+
+    estado_actual = row[6]
+    activo = row[7].upper()
+
+    # ------------------------------------------------------------------------
+    # 2) SI YA FUE CONFIRMADA → ÉXITO INMEDIATO (evitar duplicados WhatsApp).-
+    # ------------------------------------------------------------------------
+    if estado_actual == 'Confirmado':
+        logger.info(f"✔ Reserva {reservation_id} Yá Estaba Confirmada. Evitando Duplicado...")
+        return True
+
+    # ------------------------------------------------
+    # 3) SI ESTÁ EXPIRADA O CANCELADA → NO CONFIRMAR.-
+    # ------------------------------------------------
+    if estado_actual in ['Expirada', 'Cancelada'] or activo == 'FALSE':
+        logger.warning(f"Reserva {reservation_id} Nó Activa (Estado: {estado_actual}) ...")
+        return False
+
+    # ---------------------------------------
+    # 4) VERIFICAR EXPIRACIÓN DEL TIMESTAMP.-
+    # ---------------------------------------
+    try:
+        ts_expira = datetime.fromisoformat(row[12])
+        if ts_expira.tzinfo is None:
+            ts_expira = tz.localize(ts_expira)
+    except:
+        logger.error("❌ ERROR: Timestamp de Expiración Inválido en la Hoja ...")
+        return False
+
+    if ts_expira < ahora_confirmación:
+        logger.warning(f"Reserva {reservation_id} Yá Expiró...")
+        row[6] = 'Expirada'
+        row[7] = 'FALSE'
+        update_row(i, row)
+        return False
+
+    # ---------------------------------------------------------------
+    # 5) CONTROL DE DISPONIBILIDAD (EVITANDO BLOQUEARSE A SÍ MISMA).-
+    # ---------------------------------------------------------------
+    coiffeur_actual = row[3]
+    fecha_turno = row[4]
+    hora_turno = row[5]
+
+    from sheets.sheet_service import check_availability
+
+    # Primero Chequeamos Disponibilidad General.-
+    disponible = check_availability(coiffeur_actual, fecha_turno, hora_turno)
+
+    if not disponible:
+        # Confirmamos Sí Hay OTRO Turno Real Confirmado en Ese Horario.-
+        for j, otra in enumerate(data, start=2):
+            if j != i and len(otra) >= 13:
+                if (
+                    otra[3] == coiffeur_actual and
+                    otra[4] == fecha_turno and
+                    otra[5] == hora_turno and
+                    otra[6] == 'Confirmado'
+                ):
+                    logger.warning(
+                        f"❌ ERROR: Choque Real con Otra Reserva Confirmada en "
+                        f"{fecha_turno} {hora_turno} ..."
+                    )
                     return False
-                else:
-                    # Confirmar
-                    row[6] = 'Confirmado'
-                    row[7] = datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
-                    row[10] = 'FALSE'
-                    update_row(i, row)
-                    # Actualizar Calendario Visual, Pestaña: Rouss_Turnos_Calendario_Visual.-
-                    try:
-                        fecha_turno = row[4]  # Fecha del Turno
-                        actualizar_calendario_dia(fecha_turno)
-                        logger.info(f"Calendario Actualizado para Fecha: {fecha_turno}")
-                    except Exception as e:
-                        logger.error(f"ERROR al Actualizar Calendario: {e}")
+        # Sí Nó Hay Choques Reales → Permitir Confirmación.-
 
-                    return True
+    # ----------------------
+    # 6) CONFIRMAR RESERVA.-
+    # ----------------------
+    logger.info(f"✅ Confirmando Reserva {reservation_id}...")
 
-        except Exception as e:
-            logger.exception(f"ERROR: al Confirmar Reserva del Turno, en Fila {i}: {e}")
-            return False
+    row[6] = 'Confirmado'
+    row[7] = 'FALSE'   # Activo Desde Aquí Pasa a FALSE.-
 
-    return False
+    momento_confirmación = datetime.now(tz)
+    dia_ing = momento_confirmación.strftime('%A')
+    mes_ing = momento_confirmación.strftime('%B')
+
+    dia_esp = DIAS[dia_ing]
+    mes_esp = MESES[mes_ing]
+
+    row[10] = (
+        f"{dia_esp}, {momento_confirmación.day} de {mes_esp} de "
+        f"{momento_confirmación.year} {momento_confirmación.strftime('%H:%M:%S')}"
+    )
+
+    update_row(i, row)
+    logger.info(f"✔ Reserva Actualizada en Google Sheets (Fila {i}) ...")
+
+    # ------------------------------------------------
+    # 7) ACTUALIZAR CALENDARIO VISUAL PARA ESA FECHA.-
+    # ------------------------------------------------
+    try:
+        fecha_turno_iso = fecha_turno
+
+        # Convertir Fecha Larga a ISO
+        if ',' in fecha_turno:
+            partes = fecha_turno.split(',')[1].strip().split(' ')
+            dia = int(partes[0])
+            mes_esp = partes[2]
+            año = int(partes[4])
+            meses = {
+                'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+                'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+                'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+            }
+            fecha_turno_iso = f"{año}-{meses[mes_esp]:02d}-{dia:02d}"
+
+        logger.info(f"📅 Actualizando Calendario Visual para {fecha_turno_iso} ...")
+        actualizar_calendario_dia(fecha_turno_iso)
+        logger.info(f"✔ Calendario Visual Actualizado...")
+    except Exception as e:
+        logger.error(f"❌ ERROR Actualizando Calendario: {e} ...")
+
+    return True
 
 
 #Busca y Marca como Expiradas Las Reservas que Superaron el Tiempo Límite.-
 def liberar_reservas_expiradas():
     """
-    Busca y Marca como Expiradas Las Reservas que Superaron el Tiempo Límite.-
-    Se Ejecuta Periódicamente Según la Configuración del Scheduler.-
+    Busca y Marca como Expiradas las Reservas que Superaron el Tiempo Límite.
+    Ejecutado periódicamente por el scheduler.
     """
+    logger.info(">>> 🔄 Ejecutando: 'liberar_reservas_expiradas()'...")
+
+    import socket
     try:
+        socket.setdefaulttimeout(20)  # ← CAMBIAR DE 10 A 20.-
         data = read_sheet()
     except HttpError as e:
-        logger.error(f"ERROR: Leyendo Sheet en liberar_reservas_expiradas: {e}")
+        logger.error(f"ERROR Leyendo Sheet en 'liberar_reservas_expiradas': {e}")
         return
+    except socket.timeout:
+        logger.warning("TIMEOUT al Leer Sheet (>10s)")
+        return
+    except Exception as e:
+        logger.error(f"ERROR Inesperado: {e}")
+        return
+    finally:
+        socket.setdefaulttimeout(None)
 
     now = datetime.now(tz)
 
     for i, row in enumerate(data, start=2):
         try:
-            if len(row) >= 11 and row[6] == 'Pendiente' and row[10].upper() == 'TRUE':
-                ts = datetime.fromisoformat(row[9])
-                if ts < now:
-                    # Marcar como expirada
-                    row[6] = 'Expirada'
-                    row[10] = 'FALSE'
-                    update_row(i, row)
-                    logger.info(f"Reserva {row[8]} Expirada Automáticamente (fila {i})")
+            if len(row) >= 13 and row[6] == 'Pendiente' and row[7].upper() == 'TRUE':
+                timestamp_str = row[12].strip()
+
+                logger.debug(
+                    f"(DEBUG) Procesando Fila {i}: Estado={row[6]}, Activo={row[7]}, Timestamp={timestamp_str}")
+
+                try:
+                    # Parsear timestamp que YA tiene Zona Horaria.-
+                    ts = datetime.fromisoformat(timestamp_str)
+
+                    # Si por Alguna Razón Nó Tiene Zona Horaria, Agregarla.-
+                    if ts.tzinfo is None:
+                        ts = tz.localize(ts)
+
+                    logger.debug(f"(DEBUG) Timestamp Parseado: {ts}, Comparando con: {now}")
+
+                    if ts < now:
+                        # Marcar como Expirada.-
+                        logger.info(f"⚠️ Marcando Reserva {row[11]} como EXPIRADA...")
+                        row[6] = 'Expirada'  # Cambiar Estado
+                        row[7] = 'FALSE'  # Desactivar
+
+                        # Asegurarse de que la Fila tenga Todas las Columnas.-
+                        while len(row) < 13:
+                            row.append('')
+
+                        update_row(i, row)
+                        logger.info(f"✅ Reserva {row[11]} Expirada Automáticamente (Fila {i})")
+
+                    else:
+                        tiempo_restante = (ts - now).total_seconds()
+                        logger.debug(f"(DEBUG) Reserva {row[11]} aún Válida - Expira en {tiempo_restante:.0f}s")
+
+                except ValueError as ve:
+                    logger.error(f"ERROR: Parseando timestamp en Fila {i}: {timestamp_str} - {ve}")
+                    continue
+
         except Exception as e:
             logger.exception(f"ERROR: al Procesar Expiración en Fila {i}: {e}")
             continue

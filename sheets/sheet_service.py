@@ -39,7 +39,14 @@ Gestiona Lectura, Escritura y Actualización de Turnos.-
 import logging
 
 logger = logging.getLogger(__name__)
+#Nó Imprimir los 'Emojis'.-
+logging.getLogger(__name__).handlers.clear()
+
 import os
+import sys
+
+sys.stdout.reconfigure(encoding='utf-8')
+
 from pathlib import Path
 
 from googleapiclient.discovery import build
@@ -47,21 +54,30 @@ from googleapiclient.errors import HttpError
 from google.oauth2 import service_account
 from datetime import datetime
 import pytz
+import json
 
 # Construye la Ruta al Archivo credentials.json Relativo a éste Archivo ( sheets/ ).-
 HERE = Path(__file__).resolve().parent
 SERVICE_ACCOUNT_FILE = HERE / 'credentials.json'
 
-SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+SCOPES = [
+    'https://www.googleapis.com/auth/spreadsheets',
+    'https://www.googleapis.com/auth/drive.file'  # Permisos para Compartir Archivos.-
+]
 
 # SPREADSHEET_ID se Obtendrá Dinámicamente según el Año del Turno.-
 # Base ID desde .env (opcional, para Compatibilidad).-
-BASE_SPREADSHEET_ID = os.getenv('SPREADSHEET_ID_2025', '1zEUerYZ20wk1fgh1s1kse_eDb4SRxptFPgesAHKrPDw')
+BASE_SPREADSHEET_ID = os.getenv('SPREADSHEET_ID_2026', '1tz0n1qkfOOLg2HkAMdK_sYfz-aQZsJxBuMCTu_FNWXo')
+
+# Nombre de la Empresa desde .env para Construir el Nombre de las Hojas.-
+NOMBRE_EMPRESA = os.getenv('Nombre_de_la_Empresa', 'Rouss').strip()
+
 SPREADSHEET_ID = BASE_SPREADSHEET_ID  # Se Actualizará Dinámicamente.-
 
 # Mapeo Manual de IDs por Año (Mientras Nó Implementemos Búsqueda en Google Drive).-
 SPREADSHEET_IDS_BY_YEAR = {
-    2025: os.getenv('SPREADSHEET_ID_2025', '1zEUerYZ20wk1fgh1s1kse_eDb4SRxptFPgesAHKrPDw'),
+    #2025: os.getenv('SPREADSHEET_ID_2025', '1zEUerYZ20wk1fgh1s1kse_eDb4SRxptFPgesAHKrPDw'),
+    2026: os.getenv('SPREADSHEET_ID_2026', '1tz0n1qkfOOLg2HkAMdK_sYfz-aQZsJxBuMCTu_FNWXo'),
     # 2026: 'ID_cuando_lo_crees', Se debe Copiar la Hoja de una Existente,
     #                                Cambiar el Nombre y Asignar Permisos de Editor al EMaiL en
     #                                'credentials.json'
@@ -99,7 +115,7 @@ def save_spreadsheet_id_for_year(year, spreadsheet_id):
 
 
 # Nombre de la Pestaña Principal.-
-SHEET_NAME = 'Rouss_Turnos_Coiffeur'
+SHEET_NAME = 'Turnos_Coiffeur'
 
 TIMEZONE = 'America/Argentina/Buenos_Aires'
 
@@ -115,16 +131,347 @@ sheets = service.spreadsheets()
 
 tz = pytz.timezone(TIMEZONE)
 
+
 # Generar el Nombre de la Hoja de Cálculo para un Año Específico.-
 def get_spreadsheet_name_for_year(year):
     """Genera el Nombre de la Hoja de Cálculo para un Año Específico"""
-    return f"{year}_Rouss_Turnos_Coiffeur"
+    return f"{year}_{NOMBRE_EMPRESA}_Turnos_Coiffeur"
 
 
 #Obtiene el Año Actual en la Zona Horaria Configurada.-
 def get_current_year():
     """Obtiene el Año Actual en la Zona Horaria Configurada"""
     return datetime.now(tz).year
+
+
+def normalizar_fecha_a_iso(fecha):
+    """
+    Convierte cualquier Formato de Fecha a ISO (YYYY-MM-DD).-
+
+    Args:
+        fecha: Fecha en Formato ISO o largo Español.-
+
+    Returns:
+        str: Fecha en Formato ISO (YYYY-MM-DD).-
+    """
+    try:
+        # Si Yá Está en Formato ISO.-
+        if '-' in fecha and len(fecha.split('-')[0]) == 4:
+            datetime.strptime(fecha, "%Y-%m-%d")  # Validar
+            return fecha
+
+        # Si Está en Formato Largo: "Miércoles, 26 de Noviembre de 2025"
+        if ',' in fecha:
+            partes = fecha.split(',')[1].strip().split(' ')
+            dia = int(partes[0])
+            mes_esp = partes[2]
+            año = int(partes[4])
+            meses = {
+                'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+                'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+                'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+            }
+            return f"{año}-{meses[mes_esp]:02d}-{dia:02d}"
+
+        return fecha  # Devolver Sin Cambios Sí Nó Coincide.-
+
+    except Exception as e:
+        logger.error(f"Error normalizando fecha '{fecha}': {e}")
+        return fecha
+
+
+# --------------------------------------------------------------------------------
+# Validación de Fecha y Hora para Reglas del Negocio ( Turnos Permitidos ).-
+# --------------------------------------------------------------------------------
+def validar_fecha_hora_turno(fecha, hora=None):
+    """
+    Valida que:
+      • La Fecha Pertenezca al Año Actual.-
+      • La Fecha Nó sea de Días Pasados.-
+      • La Hora Nó sea de Horas Pasadas (Sólo sí la Fecha es Hoy).-
+      • La Hora esté Dentro del Rango Permitido del Negocio.-
+    Lanza ValueError con Mensajes Claros sí Viola Lá Regla.-
+    """
+
+    tz_local = tz
+    hoy = datetime.now(tz_local).date()
+
+    try:
+        # Intentar Primero Formato ISO (YYYY-MM-DD).-
+        if '-' in fecha and len(fecha.split('-')[0]) == 4:
+            fecha_dt = datetime.strptime(fecha, "%Y-%m-%d").date()
+        # Si viene en Formato Largo Español: "Miércoles, 26 de Noviembre de 2025"
+        elif ',' in fecha:
+            partes = fecha.split(',')[1].strip().split(' ')
+            dia = int(partes[0])
+            mes_esp = partes[2]
+            año = int(partes[4])
+            meses = {
+                'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+                'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+                'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+            }
+            fecha_dt = datetime(año, meses[mes_esp], dia).date()
+        else:
+            raise ValueError(f"❌ ERROR: Formato de Fecha Inválido: {fecha}")
+    except Exception as e:
+        raise ValueError(f"❌ ERROR: Formato de Fecha Inválido: {fecha}. Detalle: {str(e)}")
+
+    # Validar Año Actual.-
+    if fecha_dt.year != hoy.year:
+        raise ValueError(
+            f"❌ ERROR: Sólo sé Permiten Turnos del Año Actual ({hoy.year}). "
+            f"Fecha Recibida: {fecha_dt.year}"
+        )
+
+    # Fecha Pasada.-
+    if fecha_dt < hoy:
+        raise ValueError(
+            f"❌ ERROR: Nó sé Permiten Turnos en Días Anteriores. "
+            f"Fecha Recibida: {fecha}"
+        )
+
+    # Validar Hora sí fué Pasada y Rango Permitido.-
+    if hora is not None:
+        # --- VALIDACIÓN DE FORMATO DE HORA ---
+        try:
+            hora_obj = datetime.strptime(hora, "%H:%M").time()
+        except ValueError:
+            raise ValueError(f"❌ ERROR: Formato de Hora Inválido: {hora}. Use formato HH:MM")
+
+        # --- VALIDACIÓN DE HORA PASADA (si es hoy) ---
+        if fecha_dt == hoy:
+            ahora = datetime.now(tz_local).strftime("%H:%M")
+            if hora < ahora:
+                raise ValueError(
+                    f"❌ ERROR: La Hora Indicada ({hora}) Yá Pasó. "
+                    f"Hora Actual: {ahora}"
+                )
+
+        # --- VALIDACIÓN DE HORARIOS DEL NEGOCIO ---
+        try:
+            validar_horario_negocio(fecha_dt.strftime("%Y-%m-%d"), hora)
+        except ValueError:
+            # Re-lanzar el error con el mensaje personalizado de validar_horario_negocio
+            raise
+
+    return True
+
+
+# --------------------------------------------------------------------------------
+# Aplicar Formatos y Alineaciones a las Pestañas Recien Creadas.-
+# --------------------------------------------------------------------------------
+def aplicar_formatos_hoja(service, spreadsheet_id, sheet_title):
+    """
+        Aplica Alineación General y Formatos Especiales para las Columnas
+        de la Pestaña indicada. NO se llama recursivamente.
+        """
+    # Obtener sheetId numérico
+    sheets_info = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheet_id = None
+
+    for sh in sheets_info.get("sheets", []):
+        if sh["properties"]["title"] == sheet_title:
+            sheet_id = sh["properties"]["sheetId"]
+            break
+
+    if sheet_id is None:
+        print(f"⚠️  ERROR: No se Encontró la Pestaña: {sheet_title}")
+        return
+
+    requests = []
+
+    # -----------------------------------------------------------------
+    # 1) Alineación al Centro para TODAS LAS COLUMNAS de la Pestaña.-
+    # -----------------------------------------------------------------
+    requests.append({
+        "repeatCell": {
+            "range": {
+                "sheetId": sheet_id,
+                "startRowIndex": 0,
+                "startColumnIndex": 0
+            },
+            "cell": {
+                "userEnteredFormat": {
+                    "horizontalAlignment": "CENTER"
+                }
+            },
+            "fields": "userEnteredFormat.horizontalAlignment"
+        }
+    })
+
+    # -----------------------------------------------------------------
+    # 2) Formato Moneda (Sólo Pestaña Turnos_Coiffeur).-
+    # -----------------------------------------------------------------
+    if sheet_title == "Turnos_Coiffeur":
+        # Valor_del_Servicio (Columna I — índice 8)
+        requests.append({
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startColumnIndex": 8,
+                    "endColumnIndex": 9
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "numberFormat": {
+                            "type": "CURRENCY",
+                            "pattern": "$#,##0.00"
+                        }
+                    }
+                },
+                "fields": "userEnteredFormat.numberFormat"
+            }
+        })
+
+        # SubTOTALES (Columna J — índice 9)
+        requests.append({
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startColumnIndex": 9,
+                    "endColumnIndex": 10
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "numberFormat": {
+                            "type": "CURRENCY",
+                            "pattern": "$#,##0.00"
+                        }
+                    }
+                },
+                "fields": "userEnteredFormat.numberFormat"
+            }
+        })
+
+    # -----------------------------------------------------------------
+    # Ejecutar los Formatos Solicitados.-
+    # -----------------------------------------------------------------
+    if requests:
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": requests}
+        ).execute()
+
+    print(f"🎨 Formatos Aplicados Correctamente a la Pestaña: {sheet_title}")
+
+
+# --------------------------------------------------------------------------------
+# Gestión de Carpeta en Google Drive para Organizar Hojas.-
+# --------------------------------------------------------------------------------
+def get_or_create_folder():
+    """
+    Obtiene o Crea la Carpeta 'Rouss_Turnos_Coiffeur' en Google Drive.-
+    Comparte la Carpeta con el Service Account si es Nueva.-
+
+    Returns:
+        str: ID de la Carpeta
+    """
+    FOLDER_NAME = f"{NOMBRE_EMPRESA}_Turnos_Coiffeur"
+
+    try:
+        # Crear cliente de Drive API
+        drive_service = build('drive', 'v3', credentials=creds)
+
+        # Buscar si la carpeta ya existe
+        query = f"name='{FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+        results = drive_service.files().list(
+            q=query,
+            spaces='drive',
+            fields='files(id, name)'
+        ).execute()
+
+        folders = results.get('files', [])
+
+        if folders:
+            folder_id = folders[0]['id']
+            logger.info(f"📁 Usando Carpeta Existente: '{FOLDER_NAME}' (ID: {folder_id})")
+            return folder_id
+
+        # Si no existe, crear la carpeta
+        file_metadata = {
+            'name': FOLDER_NAME,
+            'mimeType': 'application/vnd.google-apps.folder'
+        }
+
+        folder = drive_service.files().create(
+            body=file_metadata,
+            fields='id'
+        ).execute()
+
+        folder_id = folder.get('id')
+        logger.info(f"📁 Nueva Carpeta Creada: '{FOLDER_NAME}' (ID: {folder_id})")
+
+        # Compartir la Carpeta con el Service Account.-
+        try:
+            with open(SERVICE_ACCOUNT_FILE, 'r') as f:
+                creds_data = json.load(f)
+                service_account_email = creds_data.get('client_email')
+
+            if service_account_email:
+                permission = {
+                    'type': 'user',
+                    'role': 'writer',
+                    'emailAddress': service_account_email
+                }
+
+                drive_service.permissions().create(
+                    fileId=folder_id,
+                    body=permission,
+                    fields='id'
+                ).execute()
+
+                logger.info(f"🔐 Carpeta Compartida con: {service_account_email}")
+
+        except Exception as e:
+            logger.warning(f"⚠️ Nó sé Pudo Compartir Carpeta Automáticamente: {e}")
+
+        return folder_id
+
+    except Exception as e:
+        logger.error(f"ERROR al Obtener / Crear Carpeta: {e}")
+        return None
+
+
+def find_spreadsheet_in_folder(folder_id, spreadsheet_name):
+    """
+    Busca una Hoja de Cálculo Específica Dentro de la Carpeta.-
+
+    Args:
+        folder_id: ID de la Carpeta donde Buscar
+        spreadsheet_name: Nombre de la Hoja a Buscar
+
+    Returns:
+        str: ID de la Hoja si se Encuentra, None si no Existe
+    """
+    try:
+        drive_service = build('drive', 'v3', credentials=creds)
+
+        # Buscar archivos de tipo Google Sheets en la carpeta
+        query = (
+            f"name='{spreadsheet_name}' and "
+            f"'{folder_id}' in parents and "
+            f"mimeType='application/vnd.google-apps.spreadsheet' and "
+            f"trashed=false"
+        )
+
+        results = drive_service.files().list(
+            q=query,
+            spaces='drive',
+            fields='files(id, name)'
+        ).execute()
+
+        files = results.get('files', [])
+
+        if files:
+            logger.info(f"📊 Hoja Encontrada en Carpeta: '{spreadsheet_name}' (ID: {files[0]['id']})")
+            return files[0]['id']
+
+        return None
+
+    except Exception as e:
+        logger.error(f"ERROR al Buscar Hoja en Carpeta: {e}")
+        return None
 
 
 # Obtiene el ID de la Hoja de Cálculo para un Año Específico.-
@@ -137,6 +484,7 @@ def get_or_create_spreadsheet_for_year(year):
         str: ID de la Hoja de Cálculo
     """
     # Cargar IDs Guardados al Inicio.-
+    global json
     try:
         config_file = HERE / 'spreadsheet_ids.json'
         if config_file.exists():
@@ -147,43 +495,170 @@ def get_or_create_spreadsheet_for_year(year):
                 valid_ids = {int(k): v for k, v in saved_ids.items() if k.isdigit()}
                 SPREADSHEET_IDS_BY_YEAR.update(valid_ids)
 
+                # ----------------------------------------------------------------
+                # Verificar que la Hoja Realmente Existe Antes de Retornarla.-
+                # ----------------------------------------------------------------
                 if year in SPREADSHEET_IDS_BY_YEAR:
-                    return SPREADSHEET_IDS_BY_YEAR[year]
+                    sheet_id = SPREADSHEET_IDS_BY_YEAR[year]
+                    try:
+                        # Intentar acceder a la hoja para verificar que existe
+                        service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+                        logger.info(f"📊 Usando Hoja Existente para el Año {year}: {sheet_id}")
+                        return sheet_id
+                    except HttpError as e:
+                        # La hoja Nó Existe, Eliminar del caché y Continuar para Crearla.-
+                        logger.warning(f"⚠️ Hoja del Año {year} con ID {sheet_id} Nó existe. Se Creará Una Nueva...")
+                        del SPREADSHEET_IDS_BY_YEAR[year]
+                        # También eliminar del JSON
+                        del saved_ids[str(year)]
+                        with open(config_file, 'w') as f:
+                            json.dump(saved_ids, f, indent=2)
+                # ----------------------------------------------------------------
 
     except Exception as e:
         logger.warning(f"Nó Sé Pudieron Cargar ID's Guardados: {e}")
 
+        # Si Ya Tenemos el ID, Verificar que Existe y está en la Carpeta Correcta.-
+        if year in SPREADSHEET_IDS_BY_YEAR:
+            sheet_id = SPREADSHEET_IDS_BY_YEAR[year]
+            try:
+                # Intentar acceder a la hoja para verificar que existe
+                service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+                logger.info(f"📊 Usando Hoja Existente para el Año {year}: {sheet_id}")
+                return sheet_id
+            except HttpError as e:
+                # La hoja Nó Existe, Eliminar del Caché y Buscar en Carpeta.-
+                logger.warning(f"⚠️ Hoja del año {year} con ID {sheet_id} Nó Existe. Buscando en Carpeta...")
+                del SPREADSHEET_IDS_BY_YEAR[year]
+                # Intentar eliminar del JSON también
+                try:
+                    config_file = HERE / 'spreadsheet_ids.json'
+                    if config_file.exists():
+                        with open(config_file, 'r') as f:
+                            saved_ids = json.load(f)
+                        if str(year) in saved_ids:
+                            del saved_ids[str(year)]
+                            with open(config_file, 'w') as f:
+                                json.dump(saved_ids, f, indent=2)
+                except:
+                    pass
 
-    # Si Ya Tenemos el ID, Devolverlo.-
-    if year in SPREADSHEET_IDS_BY_YEAR:
-        logger.info(f"📊 Usando Hoja Existente para el Año {year}: {SPREADSHEET_IDS_BY_YEAR[year]}")
-        return SPREADSHEET_IDS_BY_YEAR[year]
+        # Buscar la Hoja en la Carpeta Antes de Crear Una Nueva.-
+        folder_id = get_or_create_folder()
+        if folder_id:
+            existing_sheet_id = find_spreadsheet_in_folder(folder_id, spreadsheet_name)
+            if existing_sheet_id:
+                # Guardar el ID encontrado
+                save_spreadsheet_id_for_year(year, existing_sheet_id)
+                return existing_sheet_id
 
     # Si NÓ Existe, Crear Nueva Hoja.-
     spreadsheet_name = get_spreadsheet_name_for_year(year)
 
     try:
-        # Intentar Crear Nueva Hoja.-
+        # ----------------------------------------------------------------
+        # Obtener ID de la Carpeta (se crea si no existe).-
+        # ----------------------------------------------------------------
+        folder_id = get_or_create_folder()
+
+        # ----------------------------------------------------------------
+        # Crear Nueva Hoja DENTRO de la Carpeta.-
+        # ----------------------------------------------------------------
         spreadsheet = {
             'properties': {
                 'title': spreadsheet_name
             },
             'sheets': [
-                {'properties': {'title': 'Rouss_Turnos_Coiffeur'}},
-                {'properties': {'title': 'Rouss_Turnos_Calendario_Visual'}},
-                {'properties': {'title': 'Rouss_Turnos_Feriados'}}
+                {'properties': {'title': 'Turnos_Coiffeur'}},
+                {'properties': {'title': 'Turnos_Calendario_Visual'}},
+                {'properties': {'title': 'Turnos_Feriados'}},
+                {'properties': {'title': 'Turnos_Horarios_Negocio'}},
+                {'properties': {'title': 'Turnos_Staff_Negocio'}}
             ]
         }
 
         result = service.spreadsheets().create(body=spreadsheet).execute()
         new_id = result['spreadsheetId']
 
+        # ----------------------------------------------------------------
+        # Mover la Hoja a la Carpeta (si se obtuvo el folder_id).-
+        # ----------------------------------------------------------------
+        if folder_id:
+            try:
+                drive_service = build('drive', 'v3', credentials=creds)
+
+                # Mover el archivo a la carpeta
+                file = drive_service.files().get(
+                    fileId=new_id,
+                    fields='parents'
+                ).execute()
+
+                previous_parents = ",".join(file.get('parents'))
+
+                drive_service.files().update(
+                    fileId=new_id,
+                    addParents=folder_id,
+                    removeParents=previous_parents,
+                    fields='id, parents'
+                ).execute()
+
+                logger.info(f"📂 Hoja Movida a Carpeta: {folder_id}")
+
+            except Exception as e:
+                logger.warning(f"⚠️ No se Pudo Mover Hoja a Carpeta: {e}")
+        # ----------------------------------------------------------------
+
         logger.info(f"✅ Nueva Hoja Creada para el Año {year}: {new_id}")
 
-        # Inicializar Encabezados en las Pestañas.-
-        inicializar_encabezados(new_id, 'Rouss_Turnos_Coiffeur')
-        inicializar_encabezados(new_id, 'Rouss_Turnos_Calendario_Visual', tipo='calendario')
-        inicializar_encabezados(new_id, 'Rouss_Turnos_Feriados', tipo='feriados')
+        # ----------------------------------------------------------------
+        # Compartir Automáticamente con Service Account.-
+        # ----------------------------------------------------------------
+        try:
+            # Leer Email del Service Account desde credentials.json
+            with open(SERVICE_ACCOUNT_FILE, 'r') as f:
+                creds_data = json.load(f)
+                service_account_email = creds_data.get('client_email')
+
+            if service_account_email:
+                # Crear cliente de Drive API usando las mismas credenciales
+                drive_service = build('drive', 'v3', credentials=creds)
+
+                # Compartir con permisos de Editor
+                permission = {
+                    'type': 'user',
+                    'role': 'writer',
+                    'emailAddress': service_account_email
+                }
+
+                drive_service.permissions().create(
+                    fileId=new_id,
+                    body=permission,
+                    fields='id'
+                ).execute()
+
+                logger.info(f"🔐 Permisos Compartidos Automáticamente con: {service_account_email}")
+            else:
+                logger.warning("⚠️ Nó se Encontró 'client_email' en el Archivo 'credentials.json'...")
+
+        except Exception as e:
+            logger.error(f"❌ ERROR al Compartir Permisos Automáticamente: {e}")
+            logger.warning(f"   sé DEBE Compartir MANUALMENTE la Hoja con el Service Account:")
+            logger.warning(f"   URL: https://docs.google.com/spreadsheets/d/{new_id}")
+            logger.warning(
+                f"   Email: {service_account_email if 'service_account_email' in locals() else 'Ver credentials.json'}")
+        # ----------------------------------------------------------------
+
+        # Inicializar Encabezados.-
+        inicializar_encabezados(new_id, 'Turnos_Coiffeur')
+        inicializar_encabezados(new_id, 'Turnos_Calendario_Visual', tipo='calendario')
+        inicializar_encabezados(new_id, 'Turnos_Feriados', tipo='feriados')
+        inicializar_encabezados(new_id, 'Turnos_Horarios_Negocio', tipo='horarios')
+        inicializar_encabezados(new_id, 'Turnos_Staff_Negocio', tipo='staff')
+
+        # Aplicar Formatos a las 3 Pestañas (Sín Recursión).-
+        aplicar_formatos_hoja(service, new_id, "Turnos_Coiffeur")
+        aplicar_formatos_hoja(service, new_id, "Turnos_Calendario_Visual")
+        aplicar_formatos_hoja(service, new_id, "Turnos_Feriados")
 
         # Guardar el Nuevo ID para Referencia Futura.-
         save_spreadsheet_id_for_year(year, new_id)
@@ -196,22 +671,112 @@ def get_or_create_spreadsheet_for_year(year):
         return BASE_SPREADSHEET_ID
 
 
+# --------------------------------------------------------------------------------
+# Generar la Hoja del Próximo Año ( Independiente del Año Actual ).-
+# --------------------------------------------------------------------------------
+def generar_hoja_del_proximo_año():
+    """
+    Genera y Prueba la Hoja del Próximo Año ( Año Actual + 1 ).-
+    • Detecta el Año Actual.-
+    • Calcula el Año Próximo.-
+    • Crea la Nueva Hoja sí nó Existe.-
+    • Guarda el Nuevo SPREADSHEET_ID en JSON y en el Archivo .env.
+    • Devuelve el SPREADSHEET_ID Generado.-
+    """
+
+    tz_local = tz
+    año_actual = datetime.now(tz_local).year
+    año_proximo = año_actual + 1
+
+    print(f"\n📄 Generando Hoja del Año Próximo: {año_proximo}...\n")
+
+    # 1) Obtener o Crear Hoja para el Año Próximo.-
+    try:
+        spreadsheet_id = get_or_create_spreadsheet_for_year(año_proximo)
+    except Exception as e:
+        raise RuntimeError(f"❌ ERROR al Crear Hoja del Año {año_proximo}: {e}")
+
+    print(f"✔ Hoja del Año {año_proximo} Creada / Verificada Correctamente.")
+    print(f"🆔 SPREADSHEET_ID_{año_proximo} = {spreadsheet_id}")
+
+    # 2) Guardar en .env (compatibilidad igual a SPREADSHEET_ID_2025).-
+    env_path = os.path.join(os.getcwd(), '.env')
+
+    try:
+        # Leer Contenido Actual.-
+        with open(env_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+        entry = f"SPREADSHEET_ID_{año_proximo}={spreadsheet_id}\n"
+
+        # Si nó existe, Agregarlo.-
+        if not any(f"SPREADSHEET_ID_{año_proximo}" in line for line in lines):
+            with open(env_path, 'a', encoding='utf-8') as f:
+                f.write("\n# ID de la Hoja del Próximo Año Generada Automáticamente.-\n")
+                f.write(entry)
+
+        print(f"✔ SPREADSHEET_ID_{año_proximo} Guardado en .env Correctamente.-")
+
+    except Exception as e:
+        print(f"⚠️ Advertencia: Nó sé Pudo Guardar SPREADSHEET_ID en .env: {e}")
+
+    return spreadsheet_id
+
+
 #Inicializa los Encabezados de una Pestaña Nueva.-
 def inicializar_encabezados(spreadsheet_id, sheet_name, tipo='turnos'):
     """Inicializa los Encabezados de una Pestaña Nueva"""
     if tipo == 'turnos':
-        headers = [['Nombre', 'Telefono', 'Servicio', 'Coiffeur', 'Fecha',
-                    'Hora', 'Estado', 'FechaRegistro', 'ReservationID',
-                    'TimestampExpiracion', 'Activo']]
+        headers = [[
+            'Nombre',
+            'Teléfono',
+            'Servicio',
+            'Coiffeur',
+            'Fecha',
+            'Hora',
+            'Estado',
+            'Activo',
+            'Valor_del_Servicio',
+            'SubTOTALES',
+            'FechaRegistro',
+            'ReservationID',
+            'TimestampExpiración'
+        ]]
+
     elif tipo == 'calendario':
-        headers = [['Fecha', 'Hora', 'Walter', 'María', 'Detalles']]
+        # Generar Encabezados Dinámicos Basados en el Staff.-
+        try:
+            staff_names = obtener_staff_negocio()
+            reserva_columns = [f'Reserva - {name}' for name in staff_names]
+        except:
+            # Fallback Sí Falla la Lectura.-
+            reserva_columns = ['Reserva - Walter', 'Reserva - María']
+
+        headers = [['Fecha', 'Hora'] + reserva_columns + ['Coiffeur - Servicio']]
+
     elif tipo == 'feriados':
         headers = [['Fecha', 'Motivo', 'Tipo', 'Activo']]
+
+    elif tipo == 'staff':
+        headers = [['Staff_Nombres']]
+
     else:
         return
 
     try:
-        full_range = f"'{sheet_name}'!A1:K1"
+        # Seleccionar Rango Según Pestaña.-
+        if tipo == 'turnos':
+            full_range = f"'{sheet_name}'!A1:M1"  # 13 Columnas.-
+
+        elif tipo == 'calendario':
+            full_range = f"'{sheet_name}'!A1:E1"  # 05 Columnas.-
+
+        elif tipo == 'feriados':
+            full_range = f"'{sheet_name}'!A1:D1"  # 04 Columnas.-
+
+        else:
+            return
+
         body = {'values': headers}
         service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
@@ -225,19 +790,26 @@ def inicializar_encabezados(spreadsheet_id, sheet_name, tipo='turnos'):
 
 
 # Configura la Hoja de Cálculo Activa según el Año.-
-def set_active_spreadsheet(year=None):
-    """
-    Configura la Hoja de Cálculo Activa según el Año.-
-    Si NO se Proporciona Año, Usa el Actual.-
-    """
+def set_active_spreadsheet(year):
     global SPREADSHEET_ID
 
-    if year is None:
-        year = get_current_year()
+    # ✅ PRIORIDAD 1: Usar Mapping Existente en (.env).-
+    if year in SPREADSHEET_IDS_BY_YEAR:
+        SPREADSHEET_ID = SPREADSHEET_IDS_BY_YEAR[year]
+        print(f"✅ Usando Hoja del Mapping Para {year}: {SPREADSHEET_ID}")
+        return SPREADSHEET_ID
 
-    SPREADSHEET_ID = get_or_create_spreadsheet_for_year(year)
-    logger.info(f"📊 Hoja Activa Cambiada al Año: {year}: {SPREADSHEET_ID}")
-    return SPREADSHEET_ID
+    # ⚠️ Sólo Sí Nó Existe → Crear o Buscar.-
+    if os.getenv("AUTO_CREATE_YEARLY_SHEETS", "false").lower() == "true":
+        print(f"📂 Creando o Buscando Hoja Para {year}...")
+
+        # 👇 TU FUNCIÓN REAL
+        new_id = get_or_create_spreadsheet_for_year(year)
+
+        SPREADSHEET_ID = new_id
+        return new_id
+
+    raise Exception(f"Nó Hay Hoja Configurada Para El Año {year}")
 
 
 # Normalizar Nombre de Hoja.-
@@ -249,13 +821,14 @@ def _get_sheet_titles(spreadsheet_id):
     """Devuelve la Lista de Títulos ( tabs ) del Spreadsheet."""
     try:
         meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id,
-                                         includeGridData=False).execute()
+                                          includeGridData=False).execute()
     except HttpError as e:
         raise RuntimeError(f"ERROR: Nó Fué Posible Obtener Metadatos del Spreadsheet: {e}") from e
 
     sheets_meta = meta.get('sheets', []) or []
     titles = [s.get('properties', {}).get('title', '') for s in sheets_meta]
     return titles
+
 
 # Comprobar que la Hoja Existe ( Ejecutar Después de Inicializar `service` ).-
 try:
@@ -292,7 +865,8 @@ def append_row(values):
         return None
 
     body = {'values': [values]}
-    full_range = _safe_range(SHEET_NAME, 'A:K')
+    full_range = _safe_range(SHEET_NAME, 'A:M')  # ← CAMBIO: Hasta Columna M.-
+
     try:
         sheets.values().append(
             spreadsheetId=SPREADSHEET_ID,
@@ -315,20 +889,26 @@ def read_sheet(range_a1=None):
         print("La Hoja de Cálculo Nó Está Disponible, Reintente Nuevamente, Gracias.-")
         return []  # Lectura Nó Destructiva: Devolvemos Lista Vacía.-
 
+    # Leer TODAS las Columnas Reales de la Hoja: A hasta M.-
     if not range_a1:
-        range_a1 = 'A2:K1000'
-    full_range = _safe_range(SHEET_NAME, range_a1)
+        range_a1 = 'A2:M1000'  # ← Lee las 13 Columnas Reales.-
+
+    full_range = _safe_range(SHEET_NAME, range_a1)  # ← MANTENER ESTA INDENTACIÓN.-
     try:
         result = sheets.values().get(
             spreadsheetId=SPREADSHEET_ID,
             range=full_range
         ).execute()
+
     except HttpError as e:
         print("ERROR al read_sheet. Spreadsheet ID:", SPREADSHEET_ID)
         print("Rango Pedido:", full_range)
         print("HttpError:", e)
         raise
+
     return result.get('values', [])
+
+
 
 # *********************************************************************************************************************
 #  Función: es_feriado(fecha)
@@ -337,7 +917,7 @@ def read_sheet(range_a1=None):
 #
 #  Descripción:
 #     Verifica si una Fecha corresponde a un Día Nó Laborable o Feriado, según la Pestaña:
-#        "Rouss_Turnos_Feriados"
+#        "Turnos_Feriados"
 #
 #     • Acepta fechas en formato Texto (YYYY-MM-DD o DD/MM/YYYY).
 #     • Interpreta una Segunda Columna opcional:
@@ -347,13 +927,13 @@ def read_sheet(range_a1=None):
 #
 # *********************************************************************************************************************
 
-#Verifica si la Fecha Indicada está Marcada como Feriado Activo en la Hoja: 'Rouss_Turnos_Feriados'.-
+#Verifica si la Fecha Indicada está Marcada como Feriado Activo en la Hoja: 'Turnos_Feriados'.-
 def es_feriado(fecha):
     """
-    Verifica si la Fecha Indicada está Marcada como Feriado Activo en la Hoja: 'Rouss_Turnos_Feriados'.-
+    Verifica si la Fecha Indicada está Marcada como Feriado Activo en la Hoja: 'Turnos_Feriados'.-
     • Solo considera filas donde la columna 'Activo' (D) NO sea FALSE / NO / 0.
     """
-    FERIADOS_SHEET = 'Rouss_Turnos_Feriados'
+    FERIADOS_SHEET = 'Turnos_Feriados'
     try:
         full_range = _safe_range(FERIADOS_SHEET, 'A2:D100')
         result = sheets.values().get(
@@ -392,7 +972,8 @@ def update_row(row_index, values):
         return None
 
     body = {'values': [values]}
-    full_range = _safe_range(SHEET_NAME, f'A{row_index}:K{row_index}')
+    full_range = _safe_range(SHEET_NAME, f'A{row_index}:M{row_index}')  # ← CAMBIO: Hasta Columna M.-
+
     try:
         sheets.values().update(
             spreadsheetId=SPREADSHEET_ID,
@@ -427,12 +1008,18 @@ def get_available_slots(coiffeur, fecha):
     except Exception as e:
         logger.warning(f"Nó Sé Pudo Cambiar hoja para Año en Fecha: {fecha}: {e}")
 
-    # Horarios Posibles del Salón ( Cada 30 Minutos ).-
-    all_slots = [
-        '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-        '12:00', '12:30', '13:00', '14:00', '14:30', '15:00',
-        '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30'
-    ]
+    # Validar Reglas del Negocio (Año, Día y Hora Actual)
+    try:
+        validar_fecha_hora_turno(fecha)
+    except ValueError as e:
+        print(str(e))
+        return []
+
+    # Generar Horarios Según Configuración del Negocio.-
+    all_slots = generar_horarios_disponibles_dia(fecha)
+
+    if not all_slots:
+        return []  # Día Completo Cerrado.-
 
     # Obtener Turnos Ocupados.-
     data = read_sheet()
@@ -441,14 +1028,230 @@ def get_available_slots(coiffeur, fecha):
     for row in data:
         if len(row) >= 7:
             # Verificar si el Turno es del Mismo Coiffeur, Fecha y está Confirmado o Pendiente.-
-            if (row[3] == coiffeur and
-                    row[4] == fecha and
-                    row[6] in ['Confirmado', 'Pendiente']):
-                occupied_slots.add(row[5])
+            # Convertir Fecha Larga ( "Miércoles, 19 de Noviembre de 2025" ).-
+            try:
+                partes = row[4].split(',')[1].strip().split(' ')  # Fecha Sigue en E (índice 4) ✓
+                dia = int(partes[0])
+                mes_esp = partes[2]
+                año = int(partes[4])
+                meses = {
+                    'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+                    'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+                    'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+                }
+                fecha_normalizada = f"{año}-{meses[mes_esp]:02d}-{dia:02d}"
+            except:
+                fecha_normalizada = row[4]
+
+            if (row[3] == coiffeur and  # Coiffeur en D (índice 3) ✓
+                    fecha_normalizada == fecha and
+                    row[6] in ['Confirmado', 'Pendiente']):  # Estado en Columna G ( índice  6 ) ✓
+
+                occupied_slots.add(row[5])  # Hora en Columna F (índice 5) ✓
 
     # Retornar Horarios Disponibles.-
     available = [slot for slot in all_slots if slot not in occupied_slots]
     return available
+
+
+def generar_horarios_disponibles_dia(fecha):
+    """
+    Genera los horarios disponibles Según la Configuración de Turnos_Horarios_Negocio.-
+
+    Args:
+        fecha: Fecha en formato ISO (YYYY-MM-DD)
+
+    Returns:
+        Lista de horarios disponibles: ['09:00', '09:30', ...]
+    """
+    from datetime import datetime as dt, timedelta
+
+    # Obtener día de la semana
+    fecha_obj = dt.strptime(fecha, "%Y-%m-%d")
+    dia_semana_ing = fecha_obj.strftime('%A')
+
+    dias_es = {
+        'Monday': 'Lunes',
+        'Tuesday': 'Martes',
+        'Wednesday': 'Miércoles',
+        'Thursday': 'Jueves',
+        'Friday': 'Viernes',
+        'Saturday': 'Sábado',
+        'Sunday': 'Domingo'
+    }
+
+    dia_semana = dias_es[dia_semana_ing]
+
+    HORARIOS_SHEET = 'Turnos_Horarios_Negocio'
+
+    try:
+        full_range = _safe_range(HORARIOS_SHEET, 'A2:F10')
+        result = sheets.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=full_range
+        ).execute()
+        rows = result.get('values', []) or []
+    except HttpError as e:
+        logger.error(f"ERROR al Leer Horarios del Negocio: {e}")
+        # Fallback a Horarios por Defecto.-
+        return [
+            '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+            '12:00', '12:30', '13:00', '14:00', '14:30', '15:00',
+            '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30'
+        ]
+
+    # Buscar Configuración del Día.-
+    for row in rows:
+        if not row or len(row) < 1:
+            continue
+
+        if row[0].strip() == dia_semana:
+            # Verificar Sí Está Activo.-
+            activo = row[5].strip().upper() if len(row) >= 6 else 'TRUE'
+
+            if activo == 'FALSE':
+                return []  # Día Completo Cerrado.-
+
+            # Obtener horarios
+            hora_inicio_manana = row[1].strip() if len(row) >= 2 and row[1].strip() else None
+            hora_fin_manana = row[2].strip() if len(row) >= 3 and row[2].strip() else None
+            hora_inicio_tarde = row[3].strip() if len(row) >= 4 and row[3].strip() else None
+            hora_fin_tarde = row[4].strip() if len(row) >= 5 and row[4].strip() else None
+
+            horarios = []
+
+            # Generar Horarios de Mañana.-
+            if hora_inicio_manana and hora_fin_manana:
+                hora_actual = dt.strptime(hora_inicio_manana, "%H:%M")
+                hora_limite = dt.strptime(hora_fin_manana, "%H:%M")
+
+                while hora_actual < hora_limite:
+                    horarios.append(hora_actual.strftime("%H:%M"))
+                    hora_actual += timedelta(minutes=30)
+
+            # Generar Horarios de Tarde.-
+            if hora_inicio_tarde and hora_fin_tarde:
+                hora_actual = dt.strptime(hora_inicio_tarde, "%H:%M")
+                hora_limite = dt.strptime(hora_fin_tarde, "%H:%M")
+
+                while hora_actual <= hora_limite:
+                    horarios.append(hora_actual.strftime("%H:%M"))
+                    hora_actual += timedelta(minutes=30)
+
+            return horarios
+
+    # Sí Nó Encuentra Configuración, Usar Horarios por Defecto.-
+    return [
+        '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+        '12:00', '12:30', '13:00', '14:00', '14:30', '15:00',
+        '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30'
+    ]
+
+
+# Valida los Horarios de Atención del Negocio.-
+def validar_horario_negocio(fecha, hora):
+    """
+    Valida si el horario está dentro de los horarios de apertura del negocio.
+
+    Args:
+        fecha: Fecha en formato ISO (YYYY-MM-DD)
+        hora: Hora en formato HH:MM
+
+    Returns:
+        bool: True si está abierto, False si está cerrado
+
+    Raises:
+        ValueError: Si el negocio está cerrado
+    """
+    from datetime import datetime as dt
+
+    HORARIOS_SHEET = 'Turnos_Horarios_Negocio'
+
+    # Obtener día de la semana en español
+    fecha_obj = dt.strptime(fecha, "%Y-%m-%d")
+    dia_semana_ing = fecha_obj.strftime('%A')
+
+    dias_es = {
+        'Monday': 'Lunes',
+        'Tuesday': 'Martes',
+        'Wednesday': 'Miércoles',
+        'Thursday': 'Jueves',
+        'Friday': 'Viernes',
+        'Saturday': 'Sábado',
+        'Sunday': 'Domingo'
+    }
+
+    dia_semana = dias_es[dia_semana_ing]
+
+    try:
+        # Leer configuración de horarios
+        full_range = _safe_range(HORARIOS_SHEET, 'A2:F10')
+        result = sheets.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=full_range
+        ).execute()
+        rows = result.get('values', []) or []
+    except HttpError as e:
+        logger.error(f"ERROR al Leer Horarios del Negocio: {e}")
+        return True  # Por defecto permitir si hay error
+
+    # Buscar configuración del día
+    for row in rows:
+        if not row or len(row) < 1:
+            continue
+
+        if row[0].strip() == dia_semana:
+            # Verificar si el día está activo
+            activo = row[5].strip().upper() if len(row) >= 6 else 'TRUE'
+
+            if activo == 'FALSE':
+                raise ValueError(
+                    f"⚠️ Lo Siento, El Salón Permanece Cerrado los {dia_semana}s.\n\n"
+                    f"Por Favor Elegí Otra Fecha Disponible..."
+                )
+
+            # Obtener Horarios
+            hora_inicio_manana = row[1].strip() if len(row) >= 2 and row[1].strip() else None
+            hora_fin_manana = row[2].strip() if len(row) >= 3 and row[2].strip() else None
+            hora_inicio_tarde = row[3].strip() if len(row) >= 4 and row[3].strip() else None
+            hora_fin_tarde = row[4].strip() if len(row) >= 5 and row[4].strip() else None
+
+            # Verificar Sí Lá Hora Está En Algún Bloque.-
+            hora_valida = False
+
+            # Verificar Bloque Mañana.-
+            if hora_inicio_manana and hora_fin_manana:
+                if hora_inicio_manana <= hora < hora_fin_manana:
+                    hora_valida = True
+
+            # Verificar bloque Tarde.-
+            if hora_inicio_tarde and hora_fin_tarde:
+                if hora_inicio_tarde <= hora <= hora_fin_tarde:
+                    hora_valida = True
+
+            if not hora_valida:
+                # Determinar Mensaje Según él Bloque.-
+                if hora_fin_manana and hora < hora_inicio_tarde if hora_inicio_tarde else False:
+                    raise ValueError(
+                        f"⚠️ Lo Siento, El Salón está Cerrado por Hora de Almuerzo...\n\n"
+                        f"📅 Horarios de Atención {dia_semana}:\n"
+                        f"🌅 Mañana: {hora_inicio_manana} a {hora_fin_manana}\n"
+                        f"🌆 Tarde: {hora_inicio_tarde} a {hora_fin_tarde}\n\n"
+                        f"Por Favor Elegí Otro Horario..."
+                    )
+                else:
+                    raise ValueError(
+                        f"⚠️ Lo Siento, El Salón está Cerrado en ese Horario...\n\n"
+                        f"📅 Horarios de Atención {dia_semana}:\n"
+                        f"🌅 Mañana: {hora_inicio_manana or 'Cerrado'} a {hora_fin_manana or 'Cerrado'}\n"
+                        f"🌆 Tarde: {hora_inicio_tarde or 'Cerrado'} a {hora_fin_tarde or 'Cerrado'}\n\n"
+                        f"Por Favor Elegí Otro Horario..."
+                    )
+
+            return True
+
+    # Sí Nó Encuentra Configuración, Permitir Por Defecto.-
+    return True
 
 
 #Verifica si un Horario Específico está Disponible.-
@@ -460,6 +1263,20 @@ def check_availability(coiffeur, fecha, hora):
         bool: True si está Disponible, False si Está Ocupado.-
     """
 
+    # Función auxiliar para normalizar tildes y espacios.-
+    def _norm(texto):
+        import unicodedata
+        texto = texto.strip()
+        texto = ''.join(
+            c for c in unicodedata.normalize('NFD', texto)
+            if unicodedata.category(c) != 'Mn'
+        )
+        return texto.lower()
+
+    # Normalizar coiffeur y hora.-
+    coiffeur_norm = _norm(coiffeur)
+    hora_norm = hora.strip()
+
     # Extraer Año de la Fecha y Configurar Hoja Activa.-
     try:
         year = int(fecha.split('-')[0])
@@ -467,14 +1284,52 @@ def check_availability(coiffeur, fecha, hora):
     except Exception as e:
         logger.warning(f"Nó Sé Pudo Cambiar Hoja para Año en Fecha: {fecha}: {e}")
 
+    # Validaciones del Negocio.-
+    try:
+        validar_fecha_hora_turno(fecha, hora_norm)
+    except ValueError as e:
+        print(str(e))
+        return False
+
     data = read_sheet()
 
     for row in data:
         if len(row) >= 7:
-            if (row[3] == coiffeur and
-                    row[4] == fecha and
-                    row[5] == hora and
-                    row[6] in ['Confirmado', 'Pendiente']):
+
+            # Convertir Fecha Larga del Registro.-
+            try:
+                partes = row[4].split(',')[1].strip().split(' ')
+                dia = int(partes[0])
+                mes_esp = partes[2]
+                año = int(partes[4])
+                meses = {
+                    'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+                    'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+                    'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+                }
+                fecha_normalizada = f"{año}-{meses[mes_esp]:02d}-{dia:02d}"
+            except:
+                fecha_normalizada = row[4].strip()
+
+            # Normalizar Coiffeur Desde la Hoja.-
+            row_coiffeur_norm = _norm(row[3])
+
+            # Normalizar Estado.-
+            estado = row[6].strip().lower()
+
+            # Sólo 'confirmado' Significa Ocupado.-
+            ocupado = (estado == 'confirmado')
+
+            # Normalizar Hora de la Fila (por Sí Viene con Espacios).-
+            row_hora = row[5].strip()
+
+            # Evaluar Disponibilidad.-
+            if (
+                row_coiffeur_norm == coiffeur_norm and
+                fecha_normalizada == fecha and
+                row_hora == hora_norm and
+                ocupado
+            ):
                 return False
 
     return True
@@ -486,52 +1341,119 @@ def elegir_coiffeur(preferencia, fecha, hora):
     Elige el Coiffeur Según Preferencia y Disponibilidad.-
 
     Args:
-        preferencia: 'walter', 'maría', 'maria' o None
-        fecha: fecha en formato 'YYYY-MM-DD'
-        hora: hora en formato 'HH:MM'
+        preferencia: nombre del Coiffeur Elegido o None.-
+        fecha: 'YYYY-MM-DD'
+        hora: 'HH:MM'
 
     Returns:
-        str: Nombre del Coiffeur ( 'Walter' o 'María' ) o None Sí Ninguno Disponible.-
+        str: Nombre del Coiffeur o None Sí Ninguno Disponible.-
     """
-    # Normalizar Nombres.-
-    if preferencia:
-        preferencia = preferencia.lower()
-        if preferencia in ['walter']:
-            return 'Walter' if check_availability('Walter', fecha, hora) else None
-        elif preferencia in ['maría', 'maria']:
-            return 'María' if check_availability('María', fecha, hora) else None
 
-    # Sin Preferencia: Aplicar round-robin o Menor Carga.-
-    walter_available = check_availability('Walter', fecha, hora)
-    maria_available = check_availability('María', fecha, hora)
+    # Función Auxiliar para Normalizar Tildes y Espacios.-
+    def _norm(texto):
+        import unicodedata
+        texto = texto.strip()
+        texto = ''.join(
+            c for c in unicodedata.normalize('NFD', texto)
+            if unicodedata.category(c) != 'Mn'
+        )
+        return texto.lower()
 
-    if walter_available and maria_available:
-        # Aplicar Estrategia de Menor Carga.-
-        data = read_sheet()
-        walter_count = sum(1 for row in data if len(row) >= 7 and
-                           row[3] == 'Walter' and row[4] == fecha and
-                           row[6] == 'Confirmado')
-        maria_count = sum(1 for row in data if len(row) >= 7 and
-                          row[3] == 'María' and row[4] == fecha and
-                          row[6] == 'Confirmado')
+    hora_norm = hora.strip()
 
-        return 'Walter' if walter_count <= maria_count else 'María'
-    elif walter_available:
-        return 'Walter'
-    elif maria_available:
-        return 'María'
-    else:
+    # Leer STAFF Desde la Hoja Turnos_Staff_Negocio.-
+    try:
+        staff_data = sheets.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=_safe_range('Turnos_Staff_Negocio', 'A1:A50')
+        ).execute().get('values', [])
+
+        staff_list = [
+            fila[0].strip()
+            for fila in staff_data
+            if fila
+               and fila[0].strip() != ""
+               and fila[0].strip().lower() != "staff_nombres"
+        ]
+    except:
+        staff_list = []
+
+    # Sin Staff Nó Sé Puede Asignar.-
+    if not staff_list:
         return None
 
+    # Si el Cliente Eligió un Coiffeur Específico.-
+    if preferencia:
+        pref_norm = _norm(preferencia)
+        for staff in staff_list:
+            if _norm(staff) == pref_norm:
+                return staff if check_availability(staff, fecha, hora_norm) else None
+        return None
 
-#Genera o Actualiza el Calendario Visual Completo para una Fecha Específica.-
+    # Sin Preferencia: Buscar el Primero Disponible.-
+    disponibles = []
+
+    for staff in staff_list:
+        if check_availability(staff, fecha, hora_norm):
+            disponibles.append(staff)
+
+    # Si Nó Hay Ninguno Disponible.-
+    if not disponibles:
+        return None
+
+    # Estrategia: Menor Cantidad de Turnos Confirmados ese Día.-
+    data = read_sheet()
+    carga = {}
+
+    for staff in disponibles:
+        count = 0
+        staff_norm = _norm(staff)
+
+        for row in data:
+            if len(row) >= 7:
+
+                # Normalizar Fecha Larga.-
+                try:
+                    partes = row[4].split(',')[1].strip().split(' ')
+                    dia = int(partes[0])
+                    mes_esp = partes[2]
+                    año = int(partes[4])
+                    meses = {
+                        'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+                        'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+                        'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+                    }
+                    fecha_normalizada = f"{año}-{meses[mes_esp]:02d}-{dia:02d}"
+                except:
+                    fecha_normalizada = row[4].strip()
+
+                estado = row[6].strip().lower()
+                row_coiffeur_norm = _norm(row[3])
+
+                # Solo Contar CONFIRMADO.-
+                if (
+                    row_coiffeur_norm == staff_norm and
+                    fecha_normalizada == fecha and
+                    estado == 'confirmado'
+                ):
+                    count += 1
+
+        carga[staff] = count
+
+    asignado = min(carga, key=carga.get)
+    return asignado
+
+
+# Genera o Actualiza el Calendario Visual Completo para una Fecha Específica.-
 def actualizar_calendario_dia(fecha):
     """
     Genera o Actualiza el Calendario Visual Completo para una Fecha Específica.-
-    Muestra TODOS los Horarios del Día (09:00 a 18:30) con Estado Libre/Ocupado.-
+    Muestra TODOS los Horarios del Día (09:00 a 18:30) con Estado Libre / Ocupado.-
 
-    Args:
-        fecha: Fecha en formato 'YYYY-MM-DD'
+    OPTIMIZADO:
+    - Se elimina insertDimension (demasiado lento y riesgoso).
+    - La NUEVA fecha queda en la parte superior del calendario.
+    - Se actualiza o reemplaza el bloque superior sin mover toda la hoja.
     """
 
     # Extraer Año de la Fecha y Configurar Hoja Activa.-
@@ -541,7 +1463,7 @@ def actualizar_calendario_dia(fecha):
     except Exception as e:
         logger.warning(f"Nó Sé Pudo Cambiar Hoja para Año en Fecha: {fecha}: {e}")
 
-    CALENDARIO_SHEET = 'Rouss_Turnos_Calendario_Visual'
+    CALENDARIO_SHEET = 'Turnos_Calendario_Visual'
 
     # Horarios del Salón (cada 30 minutos).-
     horarios = [
@@ -549,6 +1471,31 @@ def actualizar_calendario_dia(fecha):
         '12:00', '12:30', '13:00', '14:00', '14:30', '15:00',
         '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30'
     ]
+
+    # Leer STAFF desde "Turnos_Staff_Negocio".-
+    try:
+        staff_data = sheets.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=_safe_range('Turnos_Staff_Negocio', 'A1:A50')
+        ).execute().get('values', [])
+
+        # Filtrar líneas vacías o encabezados.-
+        staff_list = [
+            fila[0].strip()
+            for fila in staff_data
+            if fila
+               and fila[0].strip() != ""
+               and fila[0].strip().lower() != "staff_nombres"
+        ]
+
+    except Exception as e:
+        logger.error(f"ERROR al Leer Staff del Negocio: {e} ...")
+        staff_list = []
+
+    # Si no hay staff, terminar.-
+    if not staff_list:
+        logger.error("ERROR: Nó Hay STAFF Definido EN 'Turnos_Staff_Negocio'...")
+        return False
 
     try:
         # Leer Turnos Confirmados con Reintentos.-
@@ -559,167 +1506,112 @@ def actualizar_calendario_dia(fecha):
                 break
             except Exception as e:
                 if intento < max_intentos - 1:
-                    logger.warning(f"Intento {intento + 1}/{max_intentos} fallido al leer sheet: {e}")
+                    logger.warning(f"Intento {intento + 1}/{max_intentos} Fallido al Leer Sheet: {e} ...")
                     import time
-                    time.sleep(2)  # Esperar 2 segundos antes de reintentar
+                    time.sleep(2)
                 else:
                     raise
 
-        # Crear Diccionario: {hora: {walter: nombre, maria: nombre}}.-
+        # Diccionario dinámico según staff.-
         turnos_del_dia = {}
+        for h in horarios:
+            turnos_del_dia[h] = {staff: 'Libre' for staff in staff_list}
+
+        # Procesar turnos confirmados.-
+        meses = {
+            'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+            'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+            'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+        }
+
         for row in data:
-            if len(row) >= 7 and row[4] == fecha and row[6] == 'Confirmado':
-                hora = row[5]
-                coiffeur = row[3]
-                nombre = row[0]
-                servicio = row[2]
 
-                if hora not in turnos_del_dia:
-                    turnos_del_dia[hora] = {'Walter': 'Libre', 'María': 'Libre', 'detalles': ''}
+            if len(row) < 7:
+                continue
 
-                turnos_del_dia[hora][coiffeur] = nombre
+            # Convertir Fecha Larga.-
+            try:
+                partes = row[4].split(',')[1].strip().split(' ')
+                dia = int(partes[0])
+                mes_esp = partes[2]
+                año = int(partes[4])
+                fecha_row = f"{año}-{meses[mes_esp]:02d}-{dia:02d}"
+            except:
+                fecha_row = None
 
-                # Agregar a Detalles.-
-                if turnos_del_dia[hora]['detalles']:
-                    turnos_del_dia[hora]['detalles'] += f" | {nombre} - {servicio}"
-                else:
-                    turnos_del_dia[hora]['detalles'] = f"{nombre} - {servicio}"
+            estado = row[6].strip().lower()
+            if fecha_row == fecha and estado == 'confirmado':
 
-        # Generar Filas del Calendario.-
+                hora = row[5].strip()
+                if hora not in horarios:
+                    continue
+
+                coiffeur = row[3].strip()
+                if coiffeur not in staff_list:
+                    continue
+
+                nombre = row[0].strip()
+                servicio = row[2].strip()
+
+                # ← ESTA LÍNEA ES LA CORRECTA
+                turnos_del_dia[hora][coiffeur] = f"{nombre} – {coiffeur} – {servicio}"
+
+        # Convertir ISO → Fecha Larga.-
+        from bot.app import DIAS, MESES
+        from datetime import datetime as _dt
+
+        _fecha_obj = _dt.strptime(fecha, "%Y-%m-%d")
+        _dia_ing = _fecha_obj.strftime("%A")
+        _mes_ing = _fecha_obj.strftime("%B")
+
+        _fecha_larga = f"{DIAS[_dia_ing]}, {_fecha_obj.day} de {MESES[_mes_ing]} de {_fecha_obj.year}"
+
         filas_calendario = []
-        for hora in horarios:
-            if hora in turnos_del_dia:
-                fila = [
-                    fecha,
-                    hora,
-                    turnos_del_dia[hora]['Walter'],
-                    turnos_del_dia[hora]['María'],
-                    turnos_del_dia[hora]['detalles']
-                ]
-            else:
-                fila = [fecha, hora, 'Libre', 'Libre', '']
 
+        # Generar Filas.-
+        for hora in horarios:
+            fila = [_fecha_larga, hora]
+            for staff in staff_list:
+                fila.append(turnos_del_dia[hora][staff])
             filas_calendario.append(fila)
 
-            # Líneas de Debug:
-            logger.info(f"(DEBUG) Fecha: {fecha}, Turnos Encontrados: {len(turnos_del_dia)}, Filas Calendario: {len(filas_calendario)}")
-            logger.info(f"(DEBUG) Primeras 3 filas: {filas_calendario[:3]}")
-
-        # Escribir en el Calendario (Sobrescribir Todo el Bloque de Esta Fecha).-
-        # Buscar Primera Fila Disponible o Actualizar si Ya Existe.-
+        # Leer Calendario Completo Existente.-
         try:
-            full_range = _safe_range(CALENDARIO_SHEET, 'A2:E1000')
             result = sheets.values().get(
                 spreadsheetId=SPREADSHEET_ID,
-                range=full_range
+                range=_safe_range(CALENDARIO_SHEET, 'A1:Z5000')
             ).execute()
-            filas_existentes = result.get('values', [])
+            calendario_existente = result.get('values', [])
         except:
-            filas_existentes = []
+            calendario_existente = []
 
-        # Buscar si Ya Existe Esta Fecha.-
-        inicio_fecha = None
-        for idx, fila in enumerate(filas_existentes):
-            if len(fila) >= 1 and fila[0] == fecha:
-                inicio_fecha = idx + 2  # +2 Porque Empieza en Fila 2.-
-                break
+        # Cantidad Total de Columnas Según Staff.-
+        num_columnas = 2 + len(staff_list)
+        letra_fin = chr(64 + num_columnas)
 
-        if inicio_fecha:
-            # Actualizar Filas Existentes ( 19 Horarios Exactos ).-
-            fin_fecha = inicio_fecha + 18  # Son 19 Horarios (0-18), por eso +18.-
-            update_range = _safe_range(CALENDARIO_SHEET, f'A{inicio_fecha}:E{fin_fecha}')
-            body = {'values': filas_calendario}
-            sheets.values().update(
-                spreadsheetId=SPREADSHEET_ID,
-                range=update_range,
-                valueInputOption='USER_ENTERED',
-                body=body
-            ).execute()
-            logger.info(f"Calendario Actualizado para Fecha: {fecha}")
-        else:
-            # Insertar Nueva Fecha al Principio (Después de Encabezados).-
-            # Primero Leer Todas las Filas Existentes para Nó Borrarlas.-
-            todas_las_filas = filas_calendario + [[''] * 5]  # Nueva fecha + Fila en Blanco (Lista Plana)
+        # -------------------------------------------------------------------
+        #                    MÉTODO OPTIMIZADO (SIN insertDimension).-
+        # -------------------------------------------------------------------
 
-            # Agregar Fechas Existentes Después.-
-            todas_las_filas.extend(filas_existentes)
+        # 1) Sobreescribimos las PRIMERAS 19 Filas Con La Nueva Fecha.-
+        rango_superior = _safe_range(
+            CALENDARIO_SHEET,
+            f"A1:{letra_fin}{len(filas_calendario)}"
+        )
 
-            # Escribir Todo Junto.-
-            total_filas = len(todas_las_filas)
-            write_range = _safe_range(CALENDARIO_SHEET, f'A2:E{1 + total_filas}')
-            body = {'values': todas_las_filas}
-            sheets.values().update(
-                spreadsheetId=SPREADSHEET_ID,
-                range=write_range,
-                valueInputOption='USER_ENTERED',
-                body=body
-            ).execute()
-            logger.info(
-                f"Calendario Creado para Nueva Fecha: {fecha} ( Preservando {len(filas_existentes)} Filas Anteriores...)")
+        sheets.values().update(
+            spreadsheetId=SPREADSHEET_ID,
+            range=rango_superior,
+            valueInputOption='USER_ENTERED',
+            body={'values': filas_calendario}
+        ).execute()
 
-            logger.info(f"(DEBUG) Total de Filas Escritas: {total_filas}, Rango: {write_range}")
-
-        # --- Marcar Días Nó Laborables o Feriados en el Calendario ---
-        from sheets.sheet_service import es_feriado
-        if es_feriado(fecha):
-            try:
-                # Crear un Bloque completo de 19 horarios Con Texto Fijo de "Día Nó Laborable o Feriado"
-                filas_feriado = [
-                    [fecha, hora, 'FERIADO', 'FERIADO', 'FERIADO — NO DISPONIBLE']
-                    for hora in horarios
-                ]
-
-                full_range = _safe_range(CALENDARIO_SHEET, 'A2:E1000')
-                result = sheets.values().get(
-                    spreadsheetId=SPREADSHEET_ID,
-                    range=full_range
-                ).execute()
-                filas_existentes = result.get('values', [])
-
-                # Buscar si yá Existe esa Fecha.-
-                inicio_fecha = None
-                for idx, fila in enumerate(filas_existentes):
-                    if len(fila) >= 1 and fila[0] == fecha:
-                        inicio_fecha = idx + 2
-                        break
-
-                if inicio_fecha:
-                    fin_fecha = inicio_fecha + 18
-                    update_range = _safe_range(CALENDARIO_SHEET, f'A{inicio_fecha}:E{fin_fecha}')
-                    body = {'values': filas_feriado}
-                    sheets.values().update(
-                        spreadsheetId=SPREADSHEET_ID,
-                        range=update_range,
-                        valueInputOption='USER_ENTERED',
-                        body=body
-                    ).execute()
-                    logger.info(f"Calendario Marcado como Día Nó Laborable o Feriado para la Fecha: {fecha}")
-
-                else:
-                    # Insertar al Inicio
-                    todas = filas_feriado + [[''] * 5]
-                    todas.extend(filas_existentes)
-                    total_filas = len(todas)
-                    write_range = _safe_range(CALENDARIO_SHEET, f'A2:E{1 + total_filas}')
-                    body = {'values': todas}
-                    sheets.values().update(
-                        spreadsheetId=SPREADSHEET_ID,
-                        range=write_range,
-                        valueInputOption='USER_ENTERED',
-                        body=body
-                    ).execute()
-                    logger.info(f"Calendario Creado con Días Nó Laborables o Feriados para Nueva Fecha: {fecha}")
-
-                    from sheets.sheet_service import es_feriado
-                    logger.info(f"(DEBUG) Resultado de es_feriado({fecha}) = {es_feriado(fecha)}")
-
-            except Exception as e:
-                logger.error(f"ERROR: al Marcar Día Nó Laborable o Feriado en Calendario: {e}")
+        logger.info(f"Calendario Actualizado (Fecha Nueva en Parte Superior): {fecha} ...")
 
         return True
 
     except HttpError as e:
-        logger.error(f"ERROR: al Actualizar Calendario con Horarios: {e}")
+        logger.error(f"ERROR: al Actualizar Calendario con Horarios: {e} ...")
         return False
 
 
@@ -740,14 +1632,30 @@ def obtener_sheet_id(nombre_hoja):
     return None
 
 
-#Colorea Automáticamente las Filas de la Pestaña 'Rouss_Turnos_Feriados'.-
+#Colorea Automáticamente las Filas de la Pestaña 'Turnos_Feriados'.-
 def colorear_feriados():
     """
-    Colorea Automáticamente las Filas de la Pestaña 'Rouss_Turnos_Feriados'.-
+    Colorea Automáticamente las Filas de la Pestaña 'Turnos_Feriados'.-
     • Feriados Activos (TRUE o vacío): Fondo Rojo Claro y texto Negrita.
     • Feriados Desactivados (FALSE / NO / 0): Fondo Blanco y texto normal.
     """
-    FERIADOS_SHEET = 'Rouss_Turnos_Feriados'
+
+    # ----------------------------------------------------------------
+    # Protección contra Timeouts: Limitar Ejecución.-
+    # ----------------------------------------------------------------
+    import time
+    _ultimo_coloreado = getattr(colorear_feriados, '_ultimo_coloreado', 0)
+    ahora = time.time()
+
+    # Solo ejecutar si pasaron al menos 5 minutos (300 segundos)
+    if ahora - _ultimo_coloreado < 300:
+        logger.debug(f"Coloreado omitido (última ejecución hace {int(ahora - _ultimo_coloreado)}s)")
+        return
+
+    colorear_feriados._ultimo_coloreado = ahora
+    # ----------------------------------------------------------------
+
+    FERIADOS_SHEET = 'Turnos_Feriados'
 
     try:
         full_range = _safe_range(FERIADOS_SHEET, 'A2:D100')
@@ -773,10 +1681,8 @@ def colorear_feriados():
         if len(row) >= 4:
             valor_activo = str(row[3]).strip().upper()
         elif len(row) >= 1:
-            # Si hay Datos pero Falta la Columna 'Activo', sé Asume Activo (rojo)
             valor_activo = ""
         else:
-            # Fila Completamente Vacía
             continue
 
         # Determinar Estado del Día Nó Laborable o Feriado
@@ -784,26 +1690,27 @@ def colorear_feriados():
 
         # Definir Formato de Color y Texto
         if activo:
-            color = {"red": 1, "green": 0.8, "blue": 0.8}   # Rojo Claro
+            color = {"red": 1, "green": 0.8, "blue": 0.8}  # Rojo Claro
             text_format = {"bold": True}
         else:
-            color = {"red": 1, "green": 1, "blue": 1}       # Blanco
+            color = {"red": 1, "green": 1, "blue": 1}  # Blanco
             text_format = {"bold": False}
 
         if activo:
             logger.info(f"(INFO) Día {row[0] if row else '?'} ACTIVADO — Marcado como Día Nó Laborable o Feriado...")
         else:
-            logger.info(f"(INFO) Día {row[0] if row else '?'} DESACTIVADO — Se Quitó Formato de Día Nó Laborable o Feriado...")
+            logger.info(
+                f"(INFO) Día {row[0] if row else '?'} DESACTIVADO — Se Quitó Formato de Día Nó Laborable o Feriado...")
 
-        # Aplicar Formato a Columnas A, B, C y D (índices 0–3)
+        # Aplicar Formato a Columnas A, B, C y D (índices 0—3)
         requests.append({
             "updateCells": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": i + 1,  # +1 Porque Empieza en A2
+                    "startRowIndex": i + 1,
                     "endRowIndex": i + 2,
                     "startColumnIndex": 0,
-                    "endColumnIndex": 4      # Hasta Columna D (nó Inclusivo)
+                    "endColumnIndex": 4
                 },
                 "rows": [{
                     "values": [
@@ -821,13 +1728,102 @@ def colorear_feriados():
     if requests:
         body = {"requests": requests}
         try:
+            # Agregar timeout de 30 segundos
+            import socket
+            socket.setdefaulttimeout(30)
+
             service.spreadsheets().batchUpdate(
                 spreadsheetId=SPREADSHEET_ID,
                 body=body
             ).execute()
+
             logger.info(f"(DEBUG) Coloreado de {len(requests)} Filas en '{FERIADOS_SHEET}' Completado...")
+
+        except socket.timeout:
+            logger.error(f"TIMEOUT al Colorear Feriados (>30s). Operación Cancelada...")
         except HttpError as e:
             logger.error(f"ERROR al Colorear Feriados: {e}")
+        finally:
+            socket.setdefaulttimeout(None)  # Restaurar TimeOut por defecto.-
+
+
+# --------------------------------------------------------------------------------
+# Lectura Dinámica del Staff desde Google Sheets.-
+# --------------------------------------------------------------------------------
+def obtener_staff_negocio():
+    """
+    Lee los Nombres del Staff desde la Pestaña 'Turnos_Staff_Negocio'.-
+
+    Returns:
+        list: Lista de Nombres del Staff (ej.: ['Walter', 'María'])
+    """
+    STAFF_SHEET = 'Turnos_Staff_Negocio'
+
+    try:
+        full_range = _safe_range(STAFF_SHEET, 'A2:A100')
+        result = sheets.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=full_range
+        ).execute()
+        rows = result.get('values', []) or []
+
+        # Filtrar nombres vacíos y normalizar.-
+        staff_names = [row[0].strip() for row in rows if row and row[0].strip()]
+
+        if not staff_names:
+            logger.warning("⚠️ Nó Sé Encontraron Nombres en 'Turnos_Staff_Negocio', Usando Valores por Defecto...")
+            return ['Walter', 'María']  # Fallback.-
+
+        logger.info(f"✅ Staff Cargado desde Google Sheets: {staff_names}")
+        return staff_names
+
+    except HttpError as e:
+        logger.error(f"ERROR: al Leer Pestaña de Staff en 'Turnos_Staff_Negocio': {e}")
+        return ['Walter', 'María']  # Fallback en caso de error.-
+
+
+# ------------------------------------------------------------------------------------------
+# Lectura Dinámica de Servicios Desde la Hoja Turnos_Servicios_Negocio desde Google Sheets.-
+# Ahora Filtra por Columna "Activo" (B) y Devuelve Sólo los Servicios con Activo = TRUE.-
+# y los Iconos Correspondientes.-
+# ------------------------------------------------------------------------------------------
+def obtener_servicios_negocio():
+    """
+    Lee los Servicios Disponibles Desde la Hoja Turnos_Servicios_Negocio.-
+    Devuelve una lista de diccionarios:
+        [{'servicio': 'Color', 'icono': '🎨'}, ...]
+    Solo incluye servicios donde 'Activo' == TRUE.-
+    """
+
+    try:
+        # Leer Columnas A (Servicio), B (Activo), C (Icono)
+        service_data = sheets.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=_safe_range('Turnos_Servicios_Negocio', 'A2:C100')
+        ).execute().get('values', [])
+
+        servicios = []
+
+        for fila in service_data:
+            if len(fila) < 3:
+                continue
+
+            nombre = fila[0].strip()
+            activo = fila[1].strip().upper()
+            icono = fila[2].strip()
+
+            # Filtrar Vacíos y Sólo Incluir Activos.-
+            if nombre != "" and activo == "TRUE":
+                servicios.append({
+                    'servicio': nombre,
+                    'icono': icono if icono else '✂️'
+                })
+
+        return servicios
+
+    except Exception as e:
+        logger.error(f"ERROR: al Leer Servicios del Negocio: {e}")
+        return []
 
 
 # --------------------------------------------------------------------------------
@@ -839,7 +1835,7 @@ def colorear_feriados():
 def smoke_test_read():
     """Lee Unas Filas y Muestra Cuántas Devolvió la API (Prueba de Solo Lectura)"""
     try:
-        values = read_sheet('A1:K10')  # lectura conservadora
+        values = read_sheet('A1:M10')  # ← CAMBIO: Hasta Columna M.-
         print("SmokeTest: Lectura OK. Filas Devueltas:", len(values))
         # Opcional: Imprimir lá Primera Fila.-
         if values:
@@ -888,5 +1884,3 @@ if __name__ == "__main__":
     # Se Ejecuta Sólo Sí Sé Corre El Archivo Directamente:
     # Desde La Raíz Del Proyecto: python -m sheets.sheet_service
     smoke_test()
-
-

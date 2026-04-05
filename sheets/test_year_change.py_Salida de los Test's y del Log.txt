@@ -1,0 +1,131 @@
+PS F:\Proyectos\Python\Bot_WhatsApp\Rouss_Turnos\python> python sheets/test_year_change.py
+(DEBUG) Hoja Encontrada: 'Turnos_Coiffeur' en Spreadsheet 1zEUerYZ20wk1fgh1s1kse_eDb4SRxptFPgesAHKrPDw
+2025-11-22 20:10:13,302 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+(DEBUG) Hoja Encontrada: 'Turnos_Coiffeur' en Spreadsheet 1zEUerYZ20wk1fgh1s1kse_eDb4SRxptFPgesAHKrPDw
+
+======================================================================
+🧪 SUITE DE TESTS - SISTEMA DE HOJAS ANUALES...
+======================================================================
+Fecha del Test: 2025-11-22 20:10:15
+
+======================================================================
+TEST 1: Test: Verificar que Funciona con el Año Actual Detectado Automáticamente...
+======================================================================
+✅ Hoja Año: 2025 Configurada: 1zEUerYZ20wk1fgh1s1kse_eDb4SRxptFPgesAHKrPDw
+✅ Horarios Disponibles para Walter el 2025-12-15:
+   09:00, 09:30, 10:00, 10:30, 11:00...
+✅ Horario 15:00 Disponible: SÍ
+
+======================================================================
+TEST 2: Verificando Creación Automática de Hoja 2026
+======================================================================
+🔄 Intentando Configurar / Crear Hoja para el Año Siguiente al Actual...
+ERROR al Crear / Obtener Hoja para el Año 2026: 
+<HttpError 403 when requesting https://sheets.googleapis.com/v4/spreadsheets?alt=json returned "The caller does not have permission". Details: "The caller does not have permission">
+✅ Hoja Año 2026 Configurada / Creada: 1zEUerYZ20wk1fgh1s1kse_eDb4SRxptFPgesAHKrPDw
+   📄 Nombre Esperado: '2026_Rouss_Turnos_Coiffeur'
+   🔗 URL: https://docs.google.com/spreadsheets/d/1zEUerYZ20wk1fgh1s1kse_eDb4SRxptFPgesAHKrPDw
+✅ Lectura de Hoja 2026 Exitosa...
+   Filas Leídas: 2
+   Encabezados: ['Nombre', 'Teléfono', 'Servicio', 'Coiffeur']...
+ERROR al Crear / Obtener Hoja para el Año 2026: 
+<HttpError 403 when requesting https://sheets.googleapis.com/v4/spreadsheets?alt=json returned "The caller does not have permission". Details: "The caller does not have permission">
+❌ ERROR: Sólo sé Permiten Turnos del Año Actual (2025). Fecha Recibida: 2026
+✅ Horarios Disponibles para Walter el: 2026-01-15:
+   Total: 0 Horarios Libres
+
+======================================================================
+TEST 3: Creando Reserva de Prueba en el Año: 2026...
+======================================================================
+🔄 Creando Reserva para: 2026 a las: 10:00...
+ERROR al Crear / Obtener Hoja para el Año 2026: 
+<HttpError 403 when requesting https://sheets.googleapis.com/v4/spreadsheets?alt=json returned "The caller does not have permission". Details: "The caller does not have permission">
+✅ Correcto: El Sistema Rechazó la Reserva del Año Siguiente.-
+   Mensaje: ❌ ERROR: Sólo sé Permiten Turnos del Año Actual (2025). Fecha Recibida: 2026
+
+======================================================================
+TEST 4: Verificando Persistencia de IDs en Archivo JSON: 'spreadsheet_ids.json'...
+======================================================================
+✅ Archivo JSON Encontrado: F:\Proyectos\Python\Bot_WhatsApp\Rouss_Turnos\Python\sheets\spreadsheet_ids.json
+   IDs Guardados:
+   • Año _commentary: ***************************************************************************************************
+   • Año _created_by: Ing. Antonio Alberto Di Santo
+   • Año _created_on: Lunes 06 de Octubre del 2025
+   • Año _program: Bot de WhatsApp con Google Sheets para AsignaciÃ³n de Turnos en Rouss Coiffeur's
+   • Año _company: MEMORY IngenierÃ­a en Sistemas
+   • Año _file_purpose: Credenciales ID's de las Hojas de CÃ¡lculo Generadas en Google Drive....
+   • Año _security_note: ARCHIVO CONFIDENCIAL - No Compartir - Incluido en .gitignore
+   • Año _commentary_end: ***************************************************************************************************
+
+⚠️  ID del Año Siguiente al Actual Nó Encontrado en Archivo JSON: 'spreadsheet_ids.json'...
+   Posible Causa: ERROR: al Guardar o Test Nó Ejecutado...
+
+======================================================================
+TEST 5: Generando Automáticamente la Hoja del Próximo Año.-
+======================================================================
+
+📄 Generando Hoja del Año Próximo: 2026...
+
+ERROR al Crear / Obtener Hoja para el Año 2026: 
+<HttpError 403 when requesting https://sheets.googleapis.com/v4/spreadsheets?alt=json returned "The caller does not have permission". Details: "The caller does not have permission">
+✔ Hoja del Año 2026 Creada / Verificada Correctamente.
+🆔 SPREADSHEET_ID_2026 = 1zEUerYZ20wk1fgh1s1kse_eDb4SRxptFPgesAHKrPDw
+✔ SPREADSHEET_ID_2026 Guardado en .env Correctamente.-
+✅ Hoja del Próximo Año Generada Correctamente.-
+   Nuevo SPREADSHEET_ID: 1zEUerYZ20wk1fgh1s1kse_eDb4SRxptFPgesAHKrPDw
+
+======================================================================
+TEST: Validando Pestañas de la Hoja del Año: 2025...
+======================================================================
+🔍 Verificando Estructura de la Hoja con ID: 1zEUerYZ20wk1fgh1s1kse_eDb4SRxptFPgesAHKrPDw
+📄 Pestañas Encontradas: Turnos_Coiffeur, Turnos_Calendario_Visual, Turnos_Feriados
+✅ Todas las Pestañas Requeridas Existen Correctamente en la Hoja Generada del Año Siguiente.
+
+======================================================================
+TEST: Validando Pestañas de la Hoja del Año: 2026...
+======================================================================
+ERROR al Crear / Obtener Hoja para el Año 2026: 
+<HttpError 403 when requesting https://sheets.googleapis.com/v4/spreadsheets?alt=json returned "The caller does not have permission". Details: "The caller does not have permission">
+🔍 Verificando Estructura de la Hoja con ID: 1zEUerYZ20wk1fgh1s1kse_eDb4SRxptFPgesAHKrPDw
+📄 Pestañas Encontradas: Turnos_Coiffeur, Turnos_Calendario_Visual, Turnos_Feriados
+✅ Todas las Pestañas Requeridas Existen Correctamente en la Hoja Generada del Año Siguiente.
+
+======================================================================
+📊 RESUMEN DE TESTS...
+======================================================================
+✅ PASS - Test Año Actual.-
+✅ PASS - Test Hoja Año 2026
+✅ PASS - Test Reserva Año Siguiente al Actual.-
+✅ PASS - Test Persistencia en Archivo JSON: 'spreadsheet_ids.json'...
+✅ PASS - Test Generar Hoja del Próximo Año al Actual.-
+✅ PASS - Test Validar Pestañas Año 2025
+✅ PASS - Test Validar Pestañas Año 2026
+
+======================================================================
+Total: 7/7 Tests Exitosos...
+======================================================================
+
+🎉 ¡TODOS LOS TESTS PASARON!...
+   El Sistema de Hojas Anuales Está Funcionando Correctamente...
+
+======================================================================
+LIMPIEZA: ¿Deseas Eliminar las Reservas de Prueba?...
+======================================================================
+⚠️  Nota: Debes Eliminar Manualmente Desde Google Sheets
+   1. Abre la Hoja 2026_Rouss_Turnos_Coiffeur
+   2. Busca Filas con 'TEST_CLIENTE_AÑO_SIGUIENTE'
+   3. Elimina Esas Filas
+
+   O simplemente Elimina Toda La Hoja del Año 2026 Sí Fué Sólo Para Testing...
+PS F:\Proyectos\Python\Bot_WhatsApp\Rouss_Turnos\python> 
+
+____________________________________________________________________________________________________
+
+Salida del Log:
+
+2025-11-22 20:10:13,302 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+
+____________________________________________________________________________________________________
+
+
+
