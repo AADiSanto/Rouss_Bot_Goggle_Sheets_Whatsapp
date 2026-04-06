@@ -4,7 +4,7 @@
 #  Created On: Lunes 06 de Octubre del 2025.-
 #
 #     Program       :   Bot de WhatsApp con Google Sheets,
-#                          para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
+#                          para Asignación de Turnos en Negocios de Coiffeur's de MEMORY   Ingeniería en Sistemas.-
 #
 #    "Module Purpose:   Proporciona la integración completa con Google Sheets, permitiendo leer, escribir y actualizar
 #                       datos de turnos, feriados y calendarios visuales, además de aplicar formato automático a las hojas."
@@ -70,6 +70,7 @@ SCOPES = [
 BASE_SPREADSHEET_ID = os.getenv('SPREADSHEET_ID_2026', '1tz0n1qkfOOLg2HkAMdK_sYfz-aQZsJxBuMCTu_FNWXo')
 
 # Nombre de la Empresa desde .env para Construir el Nombre de las Hojas.-
+#NOMBRE_EMPRESA = os.getenv('Nombre_de_la_Empresa', 'Rouss').strip()
 NOMBRE_EMPRESA = os.getenv('Nombre_de_la_Empresa', 'Rouss').strip()
 
 SPREADSHEET_ID = BASE_SPREADSHEET_ID  # Se Actualizará Dinámicamente.-

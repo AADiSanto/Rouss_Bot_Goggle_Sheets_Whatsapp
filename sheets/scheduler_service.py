@@ -4,7 +4,7 @@
 #  Created On: Lunes 06 de Octubre del 2025.-
 #
 #     Program       :   Bot de WhatsApp con Google Sheets,
-#                          para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
+#                          para Asignación de Turnos en Negocios de Coiffeur's de MEMORY   Ingeniería en Sistemas.-
 #
 #    "Module Purpose:   Gestiona la creación, confirmación y expiración automática de reservas temporales de turnos,
 #                       utilizando un scheduler en segundo plano para controlar tiempos límite y actualizar en Google Sheets."

@@ -4,7 +4,7 @@
 #  Created On: Lunes 06 de Octubre del 2025.-
 #
 #     Program       :   Bot de WhatsApp con Google Sheets,
-#                          para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
+#                          para Asignación de Turnos en Negocios de Coiffeur's de MEMORY   Ingeniería en Sistemas.-
 #
 #    "Module Purpose:   Servidor Flask Principal - Gestión del Webhook de WhatsApp.-
 #                       Maneja la Recepción y Procesamiento de Mensajes Entrantes, Implementa el Flujo
@@ -237,7 +237,8 @@ def process_text_message(sender, text):
         staff_list = '\n'.join([f"{i + 1}️⃣ {name}" for i, name in enumerate(staff_names)])
 
         send_message(sender,
-                     f"¡Hola! 👋 Bienvenido a Rouss Coiffeur's - ¿Con Qué Coiffeur Querés Tú Turno?...\n\n{staff_list}\n\nEscribí el Nombre del Coiffeur de Tú Preferencia.-")
+                     f"¡Hola! 👋 Bienvenido a Melany Coiffeur's - ¿Con Qué Coiffeur Querés Tú Turno?...\n\n{staff_list}\n\nEscribí el Nombre del Coiffeur de Tú Preferencia.-")
+                            #f"¡Hola! 👋 Bienvenido a Rouss Coiffeur's - ¿Con Qué Coiffeur Querés Tú Turno?...\n\n{staff_list}\n\nEscribí el Nombre del Coiffeur de Tú Preferencia.-")
         state['step'] = 1
 
     elif step == 1:

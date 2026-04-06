@@ -4,7 +4,7 @@
 #  Created On: Jueves 14 de Noviembre del 2025.-
 #
 #     Program          :   Bot de WhatsApp con Google Sheets,
-#                             para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
+#                             para Asignación de Turnos en Negocios de Coiffeur's de MEMORY   Ingeniería en Sistemas.-
 #
 #    "Module Purpose   :   Script de Testing para Verificar Creación Automática de Hojas por Año.-
 #                             Simula Reservas en Diferentes Años (2025, 2026) para Validar el Sistema
