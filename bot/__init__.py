@@ -4,7 +4,7 @@
 #  Created On: Lunes 06 de Octubre del 2025.-
 #
 #     Program       :   Bot de WhatsApp con Google Sheets,
-#                          para Asignación de Turnos en Rouss Coiffeur's de MEMORY   Ingeniería en Sistemas.-
+#                          para Asignación de Turnos en Negocios de Coiffeur's de MEMORY   Ingeniería en Sistemas.-
 #
 #    "Module Purpose:   Archivo de Inicialización del Paquete Bot.-
 #                       Define el Paquete como Módulo Python y Establece la Versión del Sistema de Gestión

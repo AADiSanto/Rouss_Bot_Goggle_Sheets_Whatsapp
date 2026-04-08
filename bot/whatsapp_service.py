@@ -49,7 +49,7 @@ def send_message(to_phone, message):
     Envía un Mensaje de Texto a un Número de WhatsApp
 
     Args:
-        to_phone: Número con código de país (ej: +5491122233344)
+        to_phone: Número con Código de País (ej: +5491122233344)
         message: Texto del mensaje
     """
     if not WHATSAPP_TOKEN or not PHONE_NUMBER_ID:
