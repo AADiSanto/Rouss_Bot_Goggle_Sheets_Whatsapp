@@ -39,8 +39,17 @@ Controla Expiración de Reservas de Turnos Temporales.-
 import inspect
 import logging
 import uuid
+import socket
+import pytz
+from datetime import datetime, timedelta
+from apscheduler.schedulers.background import BackgroundScheduler
+from googleapiclient.errors import HttpError
 
-import now
+# Importamos las constantes y servicios necesarios
+# Nota: Quitamos 'from bot.app import DIAS, MESES' si ya los Definimos Abajo.-
+# para evitar que cargue todo el bot antes de tiempo.-
+
+from datetime import datetime
 
 from sheets.test_sheet import data
 
@@ -62,7 +71,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from googleapiclient.errors import HttpError
 
 # Importamos Funciones de bot.app
-from bot.app import DIAS, MESES
+#from bot.app import DIAS, MESES
 
 # Importamos Funciones de sheet_service (Lectura / Actualización).-
 # Asegurarse que sheets/sheet_service.py Nó Importe iniciar_scheduler al Importar Datos.-
