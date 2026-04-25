@@ -27,14 +27,20 @@ __pycache__/
 *.pyd
 .Python
 
-# Backups y carpetas de usuario
+# Backups y Carpetas de Usuario
 ..BUps/
 
 # Documentación del Proyecto
 ..Documentación
 
+# Fotos del Proyecto
+..Fotos/
+
 # Comandos para GitHub
 ..GitHub_Comandos
+
+# Comandos para RailWay
+..RailWay_Comandos
 
 # Build / packaging
 build/

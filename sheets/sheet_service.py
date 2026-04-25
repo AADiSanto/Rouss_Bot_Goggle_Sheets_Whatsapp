@@ -137,6 +137,18 @@ else:
         str(SERVICE_ACCOUNT_FILE), scopes=SCOPES
     )
 
+# 🔐 Obtener Datos del Service Account ( Compatible Railway / Local ).-
+if GOOGLE_CREDENTIALS_JSON:
+    creds_data = creds_dict
+else:
+    with open(SERVICE_ACCOUNT_FILE, 'r') as f:
+        creds_data = json.load(f)
+
+service_account_email = creds_data.get('client_email')
+
+if not service_account_email:
+    logger.warning("⚠️ ERROR: Nó Sé Pudo Obtener él EMaiL Del Service Account de Google Sheet's...")
+
 # Inicializar Cliente de Google Sheets.-
 creds = service_account.Credentials.from_service_account_file(
     str(SERVICE_ACCOUNT_FILE), scopes=SCOPES)
@@ -418,9 +430,10 @@ def get_or_create_folder():
 
         # Compartir la Carpeta con el Service Account.-
         try:
-            with open(SERVICE_ACCOUNT_FILE, 'r') as f:
-                creds_data = json.load(f)
-                service_account_email = creds_data.get('client_email')
+            service_account_email = creds_data.get('client_email')
+
+            if not service_account_email:
+                logger.warning("⚠️ ERROR: Nó Sé Pudo Obtener El EMaiL Del Service Account de Google Sheet's...")
 
             if service_account_email:
                 permission = {
@@ -628,10 +641,11 @@ def get_or_create_spreadsheet_for_year(year):
         # Compartir Automáticamente con Service Account.-
         # ----------------------------------------------------------------
         try:
-            # Leer Email del Service Account desde credentials.json
-            with open(SERVICE_ACCOUNT_FILE, 'r') as f:
-                creds_data = json.load(f)
-                service_account_email = creds_data.get('client_email')
+            # Leer Email del Service Account desde credentials.json o en RailWay.-
+            service_account_email = creds_data.get('client_email')
+
+            if not service_account_email:
+                logger.warning("⚠️ ERROR: Nó Sé Pudo Obtener él EMaiL Del Service Account de Google Sheet's...")
 
             if service_account_email:
                 # Crear cliente de Drive API usando las mismas credenciales
