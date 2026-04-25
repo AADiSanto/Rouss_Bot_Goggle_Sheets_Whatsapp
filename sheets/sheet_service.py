@@ -56,6 +56,7 @@ from datetime import datetime
 import pytz
 import json
 
+
 # Construye la Ruta al Archivo credentials.json Relativo a éste Archivo ( sheets/ ).-
 HERE = Path(__file__).resolve().parent
 SERVICE_ACCOUNT_FILE = HERE / 'credentials.json'
@@ -119,6 +120,10 @@ def save_spreadsheet_id_for_year(year, spreadsheet_id):
 SHEET_NAME = 'Turnos_Coiffeur'
 
 TIMEZONE = 'America/Argentina/Buenos_Aires'
+
+# DEBUG Para ver en los .log de RailWay si Falla.-
+print("GOOGLE_CREDENTIALS_JSON existe?:", bool(os.getenv("GOOGLE_CREDENTIALS_JSON")))
+print("LONGITUD:", len(os.getenv("GOOGLE_CREDENTIALS_JSON") or ""))
 
 # Verificación: Archivo de Credenciales Presente para Prueba en Modo Local con NGrok.-
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON")
