@@ -56,6 +56,8 @@ from datetime import datetime
 import pytz
 import json
 
+#Debug para RailWay
+print("🔥 INICIO sheet_service.py")
 
 # Construye la Ruta al Archivo credentials.json Relativo a éste Archivo ( sheets/ ).-
 HERE = Path(__file__).resolve().parent
@@ -121,42 +123,50 @@ SHEET_NAME = 'Turnos_Coiffeur'
 
 TIMEZONE = 'America/Argentina/Buenos_Aires'
 
-# DEBUG Para ver en los .log de RailWay si Falla.-
-print("GOOGLE_CREDENTIALS_JSON existe?:", bool(os.getenv("GOOGLE_CREDENTIALS_JSON")))
-print("LONGITUD:", len(os.getenv("GOOGLE_CREDENTIALS_JSON") or ""))
-
 # Verificación: Archivo de Credenciales Presente para Prueba en Modo Local con NGrok.-
+# Leer variable UNA sola vez
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON")
 
+# DEBUG (usa la misma variable)
+print("GOOGLE_CREDENTIALS_JSON existe?:", bool(GOOGLE_CREDENTIALS_JSON))
+print("LONGITUD:", len(GOOGLE_CREDENTIALS_JSON or ""))
+if GOOGLE_CREDENTIALS_JSON:
+    try:
+        json.loads(GOOGLE_CREDENTIALS_JSON)
+        print("✅ JSON Válido")
+    except Exception as e:
+        print("❌ JSON Inválido:", e)
+
+# Credenciales
 if GOOGLE_CREDENTIALS_JSON:
     creds_dict = json.loads(GOOGLE_CREDENTIALS_JSON)
     creds = service_account.Credentials.from_service_account_info(
         creds_dict, scopes=SCOPES
     )
-# Verificación: Variable de Credenciales Presente para Producción en RailWay.-
+    creds_data = creds_dict
+
 else:
     if not SERVICE_ACCOUNT_FILE.exists():
-        raise FileNotFoundError(f"ERROR: El Archivo de Credenciales Nó Fué Encontrado: {SERVICE_ACCOUNT_FILE}")
+        logger.error(f"❌ ERROR: Nó Hay Credenciales Ní Variable en RailWay Ní Archivo Local: {SERVICE_ACCOUNT_FILE}")
+        raise RuntimeError("Credenciales de Google Nó Configuradas Correctamente...")
+
+    with open(SERVICE_ACCOUNT_FILE, 'r') as f:
+        creds_data = json.load(f)
 
     creds = service_account.Credentials.from_service_account_file(
         str(SERVICE_ACCOUNT_FILE), scopes=SCOPES
     )
 
-# 🔐 Obtener Datos del Service Account ( Compatible Railway / Local ).-
-if GOOGLE_CREDENTIALS_JSON:
-    creds_data = creds_dict
-else:
-    with open(SERVICE_ACCOUNT_FILE, 'r') as f:
-        creds_data = json.load(f)
-
+# Email del Service Account.-
 service_account_email = creds_data.get('client_email')
 
 if not service_account_email:
-    logger.warning("⚠️ ERROR: Nó Sé Pudo Obtener él EMaiL Del Service Account de Google Sheet's...")
+    logger.warning("⚠️ ERROR: No se pudo obtener el email del service account")
 
-# Inicializar Cliente de Google Sheets.-
-creds = service_account.Credentials.from_service_account_file(
-    str(SERVICE_ACCOUNT_FILE), scopes=SCOPES)
+#Debug para RailWay.-
+print("✅ Credenciales cargadas correctamente")
+
+# Cliente Sheets.-
 service = build('sheets', 'v4', credentials=creds)
 sheets = service.spreadsheets()
 
