@@ -120,9 +120,22 @@ SHEET_NAME = 'Turnos_Coiffeur'
 
 TIMEZONE = 'America/Argentina/Buenos_Aires'
 
-# Verificación: Archivo de Credenciales Presente.-
-if not SERVICE_ACCOUNT_FILE.exists():
-    raise FileNotFoundError(f"ERROR: El Archivo de Credenciales Nó Fué Encontrado: {SERVICE_ACCOUNT_FILE}")
+# Verificación: Archivo de Credenciales Presente para Prueba en Modo Local con NGrok.-
+GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON")
+
+if GOOGLE_CREDENTIALS_JSON:
+    creds_dict = json.loads(GOOGLE_CREDENTIALS_JSON)
+    creds = service_account.Credentials.from_service_account_info(
+        creds_dict, scopes=SCOPES
+    )
+# Verificación: Variable de Credenciales Presente para Producción en RailWay.-
+else:
+    if not SERVICE_ACCOUNT_FILE.exists():
+        raise FileNotFoundError(f"ERROR: El Archivo de Credenciales Nó Fué Encontrado: {SERVICE_ACCOUNT_FILE}")
+
+    creds = service_account.Credentials.from_service_account_file(
+        str(SERVICE_ACCOUNT_FILE), scopes=SCOPES
+    )
 
 # Inicializar Cliente de Google Sheets.-
 creds = service_account.Credentials.from_service_account_file(
