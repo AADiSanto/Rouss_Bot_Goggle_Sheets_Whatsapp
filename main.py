@@ -52,6 +52,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 if not os.path.exists('logs'):
     os.makedirs('logs')
 
+#Debug para RailWay.-
+print("=== VARIABLES QUE RAILWAY ME ESTÁ PASANDO ===")
+# Esto imprimirá los nombres de las variables, pero no los valores secretos
+print(list(os.environ.keys()))
+print("=============================================")
+
 # Importar Lá Aplicación.-
 from bot.app import app
 
