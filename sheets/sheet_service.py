@@ -38,6 +38,8 @@ Gestiona Lectura, Escritura y Actualización de Turnos.-
 
 import logging
 
+from dotenv import load_dotenv
+
 logger = logging.getLogger(__name__)
 #Nó Imprimir los 'Emojis'.-
 logging.getLogger(__name__).handlers.clear()
@@ -56,8 +58,36 @@ from datetime import datetime
 import pytz
 import json
 
+# Forzar La Carga de Variables Sí Existe un .env Local,
+# pero Railway Las Inyectará Directamente.-
+load_dotenv()
+
+GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+
 #Debug para RailWay
 print("🔥 INICIO sheet_service.py")
+creds_raw = os.getenv("GOOGLE_CREDENTIALS_JSON")
+print(f"DEBUG: Contenido de la Variable: {type(creds_raw)}")
+
+if not creds_raw:
+    # Si falla, intentamos buscarla sin importar mayúsculas/minúsculas por si acaso
+    for key in os.environ:
+        if key.upper() == "GOOGLE_CREDENTIALS_JSON":
+            creds_raw = os.environ[key]
+            break
+
+if creds_raw:
+    try:
+        info = json.loads(creds_raw)
+        creds = service_account.Credentials.from_service_account_info(info)
+        print("✅ Credenciales Cargadas Exitosamente Desde Variable de Entorno en RailWay...")
+    except Exception as e:
+        print(f"❌ Error al Parsear el JSON: {e}")
+        raise
+else:
+    # Si llegamos aquí, Railway realmente no la está pasando
+    raise RuntimeError("GOOGLE_CREDENTIALS_JSON Nó Encontrada én él Sistema...")
+
 
 # Construye la Ruta al Archivo credentials.json Relativo a éste Archivo ( sheets/ ).-
 HERE = Path(__file__).resolve().parent
@@ -127,7 +157,7 @@ TIMEZONE = 'America/Argentina/Buenos_Aires'
 # Leer variable UNA sola vez
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON")
 
-# DEBUG (usa la misma variable)
+# DEBUG ( Usa La Misma Variable ).-
 print("GOOGLE_CREDENTIALS_JSON existe?:", bool(GOOGLE_CREDENTIALS_JSON))
 print("LONGITUD:", len(GOOGLE_CREDENTIALS_JSON or ""))
 if GOOGLE_CREDENTIALS_JSON:
