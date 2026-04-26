@@ -57,13 +57,6 @@ from google.oauth2 import service_account
 from datetime import datetime
 import pytz
 import json
-import socket
-
-# Timeout global para todas las llamadas HTTP (Google Sheets API).
-# Se setea UNA sola vez al cargar el módulo — no dentro de los jobs del scheduler
-# para evitar condiciones de carrera entre threads de APScheduler.
-GOOGLE_API_TIMEOUT = 25
-socket.setdefaulttimeout(GOOGLE_API_TIMEOUT)
 
 # Forzar La Carga de Variables Sí Existe un .env Local,
 # pero Railway Las Inyectará Directamente.-
@@ -203,8 +196,8 @@ if not service_account_email:
 #Debug para RailWay.-
 print("✅ Credenciales cargadas correctamente")
 
-# Cliente Sheets con cache_discovery=False para Railway (filesystem efímero).-
-service = build('sheets', 'v4', credentials=creds, cache_discovery=False)
+# Cliente Sheets.-
+service = build('sheets', 'v4', credentials=creds)
 sheets = service.spreadsheets()
 
 tz = pytz.timezone(TIMEZONE)
@@ -448,8 +441,8 @@ def get_or_create_folder():
     FOLDER_NAME = f"{NOMBRE_EMPRESA}_Turnos_Coiffeur"
 
     try:
-        # Crear cliente de Drive API con timeout explícito
-        drive_service = build('drive', 'v3', credentials=creds, cache_discovery=False)
+        # Crear cliente de Drive API
+        drive_service = build('drive', 'v3', credentials=creds)
 
         # Buscar si la carpeta ya existe
         query = f"name='{FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
@@ -524,7 +517,7 @@ def find_spreadsheet_in_folder(folder_id, spreadsheet_name):
         str: ID de la Hoja si se Encuentra, None si no Existe
     """
     try:
-        drive_service = build('drive', 'v3', credentials=creds, cache_discovery=False)
+        drive_service = build('drive', 'v3', credentials=creds)
 
         # Buscar archivos de tipo Google Sheets en la carpeta
         query = (
@@ -664,7 +657,7 @@ def get_or_create_spreadsheet_for_year(year):
         # ----------------------------------------------------------------
         if folder_id:
             try:
-                drive_service = build('drive', 'v3', credentials=creds, cache_discovery=False)
+                drive_service = build('drive', 'v3', credentials=creds)
 
                 # Mover el archivo a la carpeta
                 file = drive_service.files().get(
@@ -701,7 +694,7 @@ def get_or_create_spreadsheet_for_year(year):
 
             if service_account_email:
                 # Crear cliente de Drive API usando las mismas credenciales
-                drive_service = build('drive', 'v3', credentials=creds, cache_discovery=False)
+                drive_service = build('drive', 'v3', credentials=creds)
 
                 # Compartir con permisos de Editor
                 permission = {
@@ -1525,27 +1518,22 @@ def elegir_coiffeur(preferencia, fecha, hora):
 
 
 # Genera o Actualiza el Calendario Visual Completo para una Fecha Específica.-
-def actualizar_calendario_dia(fecha):
+def reconstruir_calendario_completo():
     """
-    Genera o Actualiza el Calendario Visual Completo para una Fecha Específica.-
-    Muestra TODOS los Horarios del Día (09:00 a 18:30) con Estado Libre / Ocupado.-
+    Reconstruye el Calendario Visual COMPLETO desde cero basándose en TODOS
+    los Turnos Confirmados de la Hoja 'Turnos_Coiffeur'.
 
-    OPTIMIZADO:
-    - Se elimina insertDimension (demasiado lento y riesgoso).
-    - La NUEVA fecha queda en la parte superior del calendario.
-    - Se actualiza o reemplaza el bloque superior sin mover toda la hoja.
+    Se llama cada vez que se confirma un turno, garantizando que TODAS las
+    fechas siempre estén reflejadas sin importar el orden de confirmación.
+
+    Estrategia:
+      1) Leer todos los turnos confirmados.
+      2) Agrupar por fecha y ordenar cronológicamente.
+      3) Limpiar el calendario existente.
+      4) Escribir todos los bloques de una sola vez (una llamada a la API).
     """
-
-    # Extraer Año de la Fecha y Configurar Hoja Activa.-
-    try:
-        year = int(fecha.split('-')[0])
-        set_active_spreadsheet(year)
-    except Exception as e:
-        logger.warning(f"Nó Sé Pudo Cambiar Hoja para Año en Fecha: {fecha}: {e}")
-
     CALENDARIO_SHEET = 'Turnos_Calendario_Visual'
 
-    # Horarios del Salón (cada 30 minutos).-
     horarios = [
         '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
         '12:00', '12:30', '13:00', '14:00', '14:30', '15:00',
@@ -1559,143 +1547,161 @@ def actualizar_calendario_dia(fecha):
             range=_safe_range('Turnos_Staff_Negocio', 'A1:A50')
         ).execute().get('values', [])
 
-        # Filtrar líneas vacías o encabezados.-
         staff_list = [
             fila[0].strip()
             for fila in staff_data
             if fila
-               and fila[0].strip() != ""
-               and fila[0].strip().lower() != "staff_nombres"
+            and fila[0].strip() != ""
+            and fila[0].strip().lower() != "staff_nombres"
         ]
-
     except Exception as e:
-        logger.error(f"ERROR al Leer Staff del Negocio: {e} ...")
-        staff_list = []
-
-    # Si no hay staff, terminar.-
-    if not staff_list:
-        logger.error("ERROR: Nó Hay STAFF Definido EN 'Turnos_Staff_Negocio'...")
+        logger.error(f"ERROR al Leer Staff: {e}")
         return False
 
+    if not staff_list:
+        logger.error("ERROR: No Hay STAFF Definido en 'Turnos_Staff_Negocio'...")
+        return False
+
+    # Leer todos los Turnos Confirmados.-
     try:
-        # Leer Turnos Confirmados con Reintentos.-
-        max_intentos = 3
-        for intento in range(max_intentos):
-            try:
-                data = read_sheet()
-                break
-            except Exception as e:
-                if intento < max_intentos - 1:
-                    logger.warning(f"Intento {intento + 1}/{max_intentos} Fallido al Leer Sheet: {e} ...")
-                    import time
-                    time.sleep(2)
-                else:
-                    raise
+        data = read_sheet()
+    except Exception as e:
+        logger.error(f"ERROR al Leer Turnos para Reconstruir Calendario: {e}")
+        return False
 
-        # Diccionario dinámico según staff.-
-        turnos_del_dia = {}
-        for h in horarios:
-            turnos_del_dia[h] = {staff: 'Libre' for staff in staff_list}
+    meses_num = {
+        'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+        'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+        'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+    }
 
-        # Procesar turnos confirmados.-
-        meses = {
-            'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
-            'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
-            'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
-        }
+    from bot.app import DIAS, MESES
+    from datetime import datetime as _dt
 
-        for row in data:
+    # Recopilar todas las fechas únicas con al menos un turno Confirmado.-
+    fechas_iso_set = set()
 
-            if len(row) < 7:
-                continue
+    for row in data:
+        if len(row) < 7:
+            continue
+        if row[6].strip().lower() != 'confirmado':
+            continue
+        try:
+            partes = row[4].split(',')[1].strip().split(' ')
+            dia_n = int(partes[0])
+            mes_esp = partes[2]
+            anio_n = int(partes[4])
+            fecha_iso = f"{anio_n}-{meses_num[mes_esp]:02d}-{dia_n:02d}"
+            fechas_iso_set.add(fecha_iso)
+        except Exception:
+            continue
 
-            # Convertir Fecha Larga.-
-            try:
-                partes = row[4].split(',')[1].strip().split(' ')
-                dia = int(partes[0])
-                mes_esp = partes[2]
-                año = int(partes[4])
-                fecha_row = f"{año}-{meses[mes_esp]:02d}-{dia:02d}"
-            except:
-                fecha_row = None
+    if not fechas_iso_set:
+        logger.info("Calendario: No hay turnos confirmados, nada que reconstruir.")
+        return True
 
-            estado = row[6].strip().lower()
-            if fecha_row == fecha and estado == 'confirmado':
+    # Ordenar Las Fechas Cronológicamente, De Menor a Mayor.-
+    #fechas_ordenadas = sorted(fechas_iso_set)
+    # Ordenar Las Fechas Cronológicamente, Fechas Más Recientes Primero, de Mayor a Menor.-
+    fechas_ordenadas = sorted(fechas_iso_set, reverse=True)
 
-                hora = row[5].strip()
-                if hora not in horarios:
-                    continue
+    num_columnas = 2 + len(staff_list)
+    letra_fin = chr(64 + num_columnas)
 
-                coiffeur = row[3].strip()
-                if coiffeur not in staff_list:
-                    continue
+    # Construir Todas Las Filas en Memoria.-
+    todas_las_filas = []
 
-                nombre = row[0].strip()
-                servicio = row[2].strip()
+    for idx, fecha_iso in enumerate(fechas_ordenadas):
 
-                # ← ESTA LÍNEA ES LA CORRECTA
-                turnos_del_dia[hora][coiffeur] = f"{nombre} – {coiffeur} – {servicio}"
-
-        # Convertir ISO → Fecha Larga.-
-        from bot.app import DIAS, MESES
-        from datetime import datetime as _dt
-
-        _fecha_obj = _dt.strptime(fecha, "%Y-%m-%d")
+        # Generar Fecha Larga en Castellano.-
+        _fecha_obj = _dt.strptime(fecha_iso, "%Y-%m-%d")
         _dia_ing = _fecha_obj.strftime("%A")
         _mes_ing = _fecha_obj.strftime("%B")
+        _fecha_larga = (
+            f"{DIAS[_dia_ing]}, {_fecha_obj.day} "
+            f"de {MESES[_mes_ing]} de {_fecha_obj.year}"
+        )
 
-        _fecha_larga = f"{DIAS[_dia_ing]}, {_fecha_obj.day} de {MESES[_mes_ing]} de {_fecha_obj.year}"
+        # Inicializar grilla de horarios para esta fecha.-
+        turnos_del_dia = {h: {s: 'Libre' for s in staff_list} for h in horarios}
 
-        filas_calendario = []
+        # Llenar con los turnos confirmados de esta fecha.-
+        for row in data:
+            if len(row) < 7:
+                continue
+            if row[6].strip().lower() != 'confirmado':
+                continue
+            try:
+                partes = row[4].split(',')[1].strip().split(' ')
+                dia_n = int(partes[0])
+                mes_esp = partes[2]
+                anio_n = int(partes[4])
+                fecha_row = f"{anio_n}-{meses_num[mes_esp]:02d}-{dia_n:02d}"
+            except Exception:
+                continue
 
-        # Generar Filas.-
+            if fecha_row != fecha_iso:
+                continue
+
+            hora = row[5].strip()
+            coiffeur = row[3].strip()
+
+            if hora in horarios and coiffeur in staff_list:
+                nombre = row[0].strip()
+                servicio = row[2].strip()
+                turnos_del_dia[hora][coiffeur] = f"{nombre} – {coiffeur} – {servicio}"
+
+        # Fila separadora entre fechas (excepto antes de la primera).-
+        if idx > 0:
+            todas_las_filas.append([''] * num_columnas)
+
+        # Agregar las filas de esta fecha.-
         for hora in horarios:
             fila = [_fecha_larga, hora]
             for staff in staff_list:
                 fila.append(turnos_del_dia[hora][staff])
-            filas_calendario.append(fila)
+            todas_las_filas.append(fila)
 
-        # Leer Calendario Completo Existente.-
-        try:
-            result = sheets.values().get(
-                spreadsheetId=SPREADSHEET_ID,
-                range=_safe_range(CALENDARIO_SHEET, 'A1:Z5000')
-            ).execute()
-            calendario_existente = result.get('values', [])
-        except:
-            calendario_existente = []
+    # Limpiar el calendario completo.-
+    try:
+        sheets.values().clear(
+            spreadsheetId=SPREADSHEET_ID,
+            range=_safe_range(CALENDARIO_SHEET, 'A1:Z5000')
+        ).execute()
+    except Exception as e:
+        logger.error(f"ERROR al Limpiar Calendario Visual: {e}")
+        return False
 
-        # Cantidad Total de Columnas Según Staff.-
-        num_columnas = 2 + len(staff_list)
-        letra_fin = chr(64 + num_columnas)
-
-        # -------------------------------------------------------------------
-        #                    MÉTODO OPTIMIZADO (SIN insertDimension).-
-        # -------------------------------------------------------------------
-
-        # 1) Sobreescribimos las PRIMERAS 19 Filas Con La Nueva Fecha.-
-        rango_superior = _safe_range(
+    # Escribir todo el calendario de una sola vez.-
+    try:
+        rango_total = _safe_range(
             CALENDARIO_SHEET,
-            f"A1:{letra_fin}{len(filas_calendario)}"
+            f"A1:{letra_fin}{len(todas_las_filas)}"
         )
-
         sheets.values().update(
             spreadsheetId=SPREADSHEET_ID,
-            range=rango_superior,
+            range=rango_total,
             valueInputOption='USER_ENTERED',
-            body={'values': filas_calendario}
+            body={'values': todas_las_filas}
         ).execute()
 
-        logger.info(f"Calendario Actualizado (Fecha Nueva en Parte Superior): {fecha} ...")
-
+        logger.info(
+            f"Calendario Reconstruido: {len(fechas_ordenadas)} fecha(s), "
+            f"{len(todas_las_filas)} filas totales."
+        )
         return True
 
     except HttpError as e:
-        logger.error(f"ERROR: al Actualizar Calendario con Horarios: {e} ...")
+        logger.error(f"ERROR al Escribir Calendario Visual: {e}")
         return False
 
 
-#Devuelve el SheetId (Numérico) de una Pestaña, Requerido para BatchUpdate.-
+# Mantener alias para compatibilidad con cualquier llamada existente.-
+def actualizar_calendario_dia(fecha):
+    """Alias de compatibilidad — ahora reconstruye el calendario completo."""
+    return reconstruir_calendario_completo()
+
+
 def obtener_sheet_id(nombre_hoja):
     """Devuelve el SheetId (numérico) de una Pestaña, Requerido para BatchUpdate..."""
     try:
