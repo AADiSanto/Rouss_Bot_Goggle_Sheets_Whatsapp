@@ -384,6 +384,7 @@ def process_text_message(sender, text):
             mes_esp = MESES[mes_ing]
 
             state['fecha_larga'] = f"{dia_esp}, {fecha_obj.day} de {mes_esp} de {fecha_obj.year}"
+            state['fecha_dia_esp'] = dia_esp  # ← Guardar Día en Castellano para Usar en Steps Siguientes.-
 
             # --- Control de Días Nó Laborables o Feriados ---
             from sheets.sheet_service import es_feriado
@@ -401,14 +402,14 @@ def process_text_message(sender, text):
             if horarios:
                 horarios_text = '\n'.join([f"⏰ {h}" for h in horarios])
                 send_message(sender,
-                             f"Horarios Disponibles para: {state['coiffeur']} ({icono_srv} {state['servicio']}) el {text}:\n\n"
+                             f"Horarios Disponibles para: {state['coiffeur']} ({icono_srv} {state['servicio']}) el {dia_esp} {text}:\n\n"
                              f"{horarios_text}\n\n"
                              "⚠️ Tenés 03 Minutos para Elegir y Confirmar Tú Reserva...\n\n"
                              "Escribí el Horario que Preferís ( Ej.: 11:00 )...")
                 state['step'] = 4
             else:
                 send_message(sender,
-                             f"Lo Siento, Nó Hay Horarios Disponibles para: {state['coiffeur']} ({icono_srv} {state['servicio']}) ese Día. ¿Querés Probar con Otra Fecha?...")
+                             f"Lo Siento, Nó Hay Horarios Disponibles para: {state['coiffeur']} ({icono_srv} {state['servicio']}) el {dia_esp} {text}. ¿Querés Probar con Otra Fecha?...")
                 state['step'] = 3
 
         except ValueError:
@@ -528,7 +529,7 @@ def process_text_message(sender, text):
                 send_message(sender,
                              f"✔ ¡ TURNO CONFIRMADO !\n\n"
                              f"👤 Coiffeur  : {state['coiffeur']}\n"
-                             f"📅 Fecha     : {state['fecha_display']}\n"
+                             f"📅 Fecha     : {state.get('fecha_dia_esp', '')} {state['fecha_display']}\n"
                              f"⏰ Hora      : {state['hora']}\n"
                              f"{icono_srv} Servicio: {state['servicio']}\n\n"
                              f"¡ Té Esperamos ! Si Necesitás Cancelar o Modificar Tú Turno, Contactános, Gracias...")
