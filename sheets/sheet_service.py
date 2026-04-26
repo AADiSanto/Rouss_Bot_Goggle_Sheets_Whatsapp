@@ -1079,7 +1079,7 @@ def ordenar_hoja():
                     'endColumnIndex': 14  # ← Columnas A a N.-
                 },
                 'sortSpecs': [
-                    {'dimensionIndex': 13, 'sortOrder': 'ASCENDING'},  # ← Col N FechaISO.-
+                    {'dimensionIndex': 13, 'sortOrder': 'DESCENDING'},  # ← Col N FechaISO ( Fecha Mayor Primero ).-
                     {'dimensionIndex': 5,  'sortOrder': 'ASCENDING'},  # ← Col F Hora.-
                 ]
             }
