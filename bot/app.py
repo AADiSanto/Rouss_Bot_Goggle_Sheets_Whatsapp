@@ -111,7 +111,7 @@ from sheets.sheet_service import (
 
 from sheets.scheduler_service import (
     crear_reserva_provisional, confirmar_reserva,
-    iniciar_scheduler
+    iniciar_scheduler, RESERVA_SECONDS
 )
 
 from bot.whatsapp_service import send_message, send_list_message
@@ -466,7 +466,7 @@ def process_text_message(sender, text):
             send_message(sender,
                          f"📋 *Reserva Temporal Creada:*\n\n"
                          f"👤 Coiffeur: {state['coiffeur']}\n"
-                         f"📅 Fecha: {state['fecha_display']}\n"
+                         f"📅 Fecha: {state.get('fecha_dia_esp', '')} {state['fecha_display']}\n"
                          f"⏰ Hora: {hora}\n"
                          f"{icono_srv} Servicio: {state['servicio']}\n\n"
                          f"⚠️ *IMPORTANTE:* Escribí 'CONFIRMAR' en los Próximos 60 Segundos para Asegurar Tú Turno...")
@@ -496,7 +496,7 @@ def process_text_message(sender, text):
                 tiempo_transcurrido = (dt_now.now(tz) - state['timestamp_reserva']).total_seconds()
                 logger.info(f"(DEBUG) Tiempo Transcurrido: {tiempo_transcurrido:.1f}s")
 
-                if tiempo_transcurrido > 60:
+                if tiempo_transcurrido > RESERVA_SECONDS:  # ← Usa la Constante del Scheduler que es de 03 Minutos.-
                     try:
                         from sheets.sheet_service import read_sheet, update_row
                         data = read_sheet()
