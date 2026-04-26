@@ -82,8 +82,8 @@ import logging
 logging.getLogger().handlers.clear()
 logger = logging.getLogger(__name__)
 
-# Tiempo por Defecto para Expiración de Reserva (en Segundos).-
-RESERVA_SECONDS = 120  # ← Cambiar de 60 a 120 Segundos.-
+# Tiempo por Defecto para Expiración de Reserva ( en Segundos ).-
+RESERVA_SECONDS = 180  # ← Cambiar de 120 a 180 Segundos = 03 Minutos.-
 
 # Scheduler Singleton para Evitar Múltiples Instancias en el Mismo Proceso.-
 _SCHEDULER = None
@@ -194,20 +194,17 @@ def confirmar_reserva(reservation_id):
         bool: True Sí Sé Confirmó Exitosamente, False Sí Nó Sé Encontró o Expiró.-
     """
 
-    import socket
     logger.info(f"🔍 Iniciando Confirmación de Reserva {reservation_id} ...")
 
     # -------------------------------------------------------------------
-    # LECTURA SEGURA DE LA HOJA.-
+    # LECTURA SEGURA DE LA HOJA.
+    # El timeout está configurado a nivel httplib2 en sheet_service.
     # -------------------------------------------------------------------
     try:
-        socket.setdefaulttimeout(30)
         data = read_sheet()
     except Exception as e:
-        logger.error(f"❌ ERROR: al Leer Google Sheets: {e} ...")
+        logger.error(f"❌ ERROR: al Leer Google Sheets: {type(e).__name__}: {e} ...")
         return False
-    finally:
-        socket.setdefaulttimeout(None)
 
     ahora_confirmación = datetime.now(tz)
 
@@ -351,21 +348,17 @@ def liberar_reservas_expiradas():
     """
     logger.info(">>> 🔄 Ejecutando: 'liberar_reservas_expiradas()'...")
 
-    import socket
+    # El timeout ya está configurado en el cliente httplib2 dentro de sheet_service.
+    # NO usar socket.setdefaulttimeout() aquí: no es thread-safe con APScheduler.
     try:
-        socket.setdefaulttimeout(20)  # ← CAMBIAR DE 10 A 20.-
         data = read_sheet()
     except HttpError as e:
         logger.error(f"ERROR Leyendo Sheet en 'liberar_reservas_expiradas': {e}")
         return
-    except socket.timeout:
-        logger.warning("TIMEOUT al Leer Sheet (>10s)")
-        return
     except Exception as e:
-        logger.error(f"ERROR Inesperado: {e}")
+        # Captura también TimeoutError, httplib2.ServerNotFoundError, etc.
+        logger.error(f"ERROR / TIMEOUT al Leer Sheet: {type(e).__name__}: {e}")
         return
-    finally:
-        socket.setdefaulttimeout(None)
 
     now = datetime.now(tz)
 
@@ -461,14 +454,14 @@ def iniciar_scheduler(interval_seconds: int = 6):
         logger.info(f"(scheduler) Job '{_JOB_ID}' Agregado al scheduler")
 
     # -------------------------------------------------------------------------------------
-    # Nuevo Job: Actualiza Colores de Feriados Cada 05 Minutos (solo formato visual).-
+    # Nuevo Job: Actualiza Colores de Feriados Cada 15 Minutos ( Sólo Formato Visual ).-
     # -------------------------------------------------------------------------------------
     try:
         from sheets.sheet_service import colorear_feriados
 
         _SCHEDULER.add_job(colorear_feriados, 'interval',
-                           minutes=3, id='colorear_feriados')
-        logger.info(f"(scheduler) Job 'colorear_feriados' Agregado (cada 03 Minutos)...")
+                           minutes=15, id='colorear_feriados')
+        logger.info(f"(scheduler) Job 'colorear_feriados' Agregado (cada 15 Minutos)...")
 
     except Exception as e:
         logger.error(f"(scheduler) ERROR: al Agregar Job colorear_feriados: {e}")
