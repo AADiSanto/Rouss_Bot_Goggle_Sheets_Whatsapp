@@ -20,7 +20,8 @@ flask==3.0.0
 requests==2.31.0
 google-api-python-client==2.108.0
 google-auth==2.25.2
-google-auth-httplib2
+google-auth-httplib2==0.2.0
+httplib2>=0.22.0
 google-auth-oauthlib
 python-dotenv==1.0.0
 pytz==2023.3
