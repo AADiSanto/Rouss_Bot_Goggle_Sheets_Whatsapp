@@ -76,7 +76,7 @@ from googleapiclient.errors import HttpError
 # Importamos Funciones de sheet_service (Lectura / Actualización).-
 # Asegurarse que sheets/sheet_service.py Nó Importe iniciar_scheduler al Importar Datos.-
 from sheets.sheet_service import read_sheet, update_row, append_row, tz, \
-    reconstruir_calendario_completo, validar_fecha_hora_turno
+    reconstruir_calendario_completo, validar_fecha_hora_turno, ordenar_hoja
 
 import logging
 logging.getLogger().handlers.clear()
@@ -142,7 +142,7 @@ def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora)
     # ----------------------------------------------------
     reservation_id = str(uuid.uuid4())
 
-    # Timestamp de Expiración (Guardado Como Texto en la Hoja).-
+    # Timestamp de Expiración ( Guardado Como Texto en la Hoja ).-
     ts_expira = (datetime.now(tz) + timedelta(seconds=RESERVA_SECONDS)).isoformat(sep=' ')
 
     # ----------------------------------------------------
@@ -160,6 +160,23 @@ def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora)
         f"{now.year} {now.strftime('%H:%M:%S')}"
     )
 
+    # --------------------------------------------------
+    # Extraer FechaISO ( YYYY-MM-DD ) Para Columna N.-
+    # --------------------------------------------------
+    meses_num = {
+        'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+        'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+        'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+    }
+    try:
+        if ',' in fecha:
+            partes = fecha.split(',')[1].strip().split(' ')
+            fecha_iso = f"{int(partes[4])}-{meses_num[partes[2]]:02d}-{int(partes[0]):02d}"
+        else:
+            fecha_iso = fecha  # ← Ya Viene en Formato ISO.-
+    except Exception:
+        fecha_iso = ''
+
     # ----------------------------------------------
     # Fila Completa Para Insertar en Google Sheets.-
     # ----------------------------------------------
@@ -176,7 +193,8 @@ def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora)
         '',                # J - SubTOTALES
         fecha_registro,    # K
         reservation_id,    # L
-        ts_expira          # M - Expira
+        ts_expira,         # M - Expira
+        fecha_iso          # N ← FechaISO para Ordenar ( YYYY-MM-DD ).-
     ]
 
     # Escritura en Google Sheets.-
