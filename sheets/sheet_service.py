@@ -938,7 +938,7 @@ def append_row(values):
         return None
 
     body = {'values': [values]}
-    full_range = _safe_range(SHEET_NAME, 'A:M')  # ← CAMBIO: Hasta Columna M.-
+    full_range = _safe_range(SHEET_NAME, 'A:N')  # ← CAMBIO: Hasta Columna N ( La N oculta es la Fecha para la Ordenación ).-
 
     try:
         sheets.values().append(
@@ -964,7 +964,7 @@ def read_sheet(range_a1=None):
 
     # Leer TODAS las Columnas Reales de la Hoja: A hasta M.-
     if not range_a1:
-        range_a1 = 'A2:M1000'  # ← Lee las 13 Columnas Reales.-
+        range_a1 = 'A2:N1000'  # ← Lee las 13 Columnas Reales, Incluír Columna N FechaISO para Ordenar Fechas.-.-
 
     full_range = _safe_range(SHEET_NAME, range_a1)  # ← MANTENER ESTA INDENTACIÓN.-
     try:
@@ -1045,7 +1045,7 @@ def update_row(row_index, values):
         return None
 
     body = {'values': [values]}
-    full_range = _safe_range(SHEET_NAME, f'A{row_index}:M{row_index}')  # ← CAMBIO: Hasta Columna M.-
+    full_range = _safe_range(SHEET_NAME, f'A{row_index}:N{row_index}')  # ← Columna N = FechaISO para la Ordenación de Fechas.-
 
     try:
         sheets.values().update(
@@ -1059,6 +1059,41 @@ def update_row(row_index, values):
         print("Rango Pedido:", full_range)
         print("HttpError:", e)
         raise
+
+
+#Ordena la Hoja Principal por FechaISO ( Col N ) y Hora ( Col F ) Ascendente.-
+def ordenar_hoja():
+    """
+    Ordena 'Turnos_Coiffeur' por FechaISO ( Columna N ) y Hora ( Columna F )
+    Ascendente después de Cada Confirmación de Turno.-
+    """
+    try:
+        sheet_id = obtener_sheet_id(SHEET_NAME)
+
+        requests_body = [{
+            'sortRange': {
+                'range': {
+                    'sheetId': sheet_id,
+                    'startRowIndex': 1,   # ← Fila 2 ( Saltear Encabezado ).-
+                    'startColumnIndex': 0,
+                    'endColumnIndex': 14  # ← Columnas A a N.-
+                },
+                'sortSpecs': [
+                    {'dimensionIndex': 13, 'sortOrder': 'ASCENDING'},  # ← Col N FechaISO.-
+                    {'dimensionIndex': 5,  'sortOrder': 'ASCENDING'},  # ← Col F Hora.-
+                ]
+            }
+        }]
+
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=SPREADSHEET_ID,
+            body={'requests': requests_body}
+        ).execute()
+
+        logger.info("✔ Hoja Ordenada por FechaISO y Hora Ascendente...")
+
+    except Exception as e:
+        logger.error(f"ERROR al Ordenar Hoja: {e}")
 
 
 #Obtiene Horarios Disponibles para un Coiffeur en una Fecha Específica.-
