@@ -1575,7 +1575,19 @@ def reconstruir_calendario_completo():
         'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
     }
 
-    from bot.app import DIAS, MESES
+    #Definidos Localmente para Evitar Import Circular con bot.app.-
+    DIAS = {
+        'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
+        'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado',
+        'Sunday': 'Domingo'
+    }
+    MESES = {
+        'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
+        'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
+        'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
+        'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
+    }
+
     from datetime import datetime as _dt
 
     # Recopilar todas las fechas únicas con al menos un turno Confirmado.-
