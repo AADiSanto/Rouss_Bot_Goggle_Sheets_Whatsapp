@@ -301,7 +301,7 @@ def confirmar_reserva(reservation_id):
                     otra[6] == 'Confirmado'
                 ):
                     logger.warning(
-                        f"❌ ERROR: Choque Real con Otra Reserva Confirmada en "
+                        f"❌ ERROR: Choque Real con Otra Reserva Confirmada en: "
                         f"{fecha_turno} {hora_turno} ..."
                     )
                     return False
@@ -329,6 +329,16 @@ def confirmar_reserva(reservation_id):
 
     update_row(i, row)
     logger.info(f"✔ Reserva Actualizada en Google Sheets (Fila {i}) ...")
+
+    # ------------------------------------------------
+    # Ordenar Hoja por FechaISO ( Col N ) y Hora ( Col F ).-
+    # ------------------------------------------------
+    try:
+        logger.info(f"📊 Ordenando Hoja Principal...")
+        ordenar_hoja()
+        logger.info(f"✔ Hoja Ordenada Exitosamente...")
+    except Exception as e:
+        logger.error(f"❌ ERROR al Ordenar Hoja: {e} ...")
 
     # ------------------------------------------------
     # 7) RECONSTRUIR CALENDARIO VISUAL COMPLETO.-
