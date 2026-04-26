@@ -75,8 +75,8 @@ from googleapiclient.errors import HttpError
 
 # Importamos Funciones de sheet_service (Lectura / Actualización).-
 # Asegurarse que sheets/sheet_service.py Nó Importe iniciar_scheduler al Importar Datos.-
-from sheets.sheet_service import read_sheet, update_row, append_row, tz, actualizar_calendario_dia, \
-    validar_fecha_hora_turno
+from sheets.sheet_service import read_sheet, update_row, append_row, tz, \
+    reconstruir_calendario_completo, validar_fecha_hora_turno
 
 import logging
 logging.getLogger().handlers.clear()
@@ -313,29 +313,15 @@ def confirmar_reserva(reservation_id):
     logger.info(f"✔ Reserva Actualizada en Google Sheets (Fila {i}) ...")
 
     # ------------------------------------------------
-    # 7) ACTUALIZAR CALENDARIO VISUAL PARA ESA FECHA.-
+    # 7) RECONSTRUIR CALENDARIO VISUAL COMPLETO.-
+    #    Regenera TODAS las fechas confirmadas, no solo la del turno nuevo.
     # ------------------------------------------------
     try:
-        fecha_turno_iso = fecha_turno
-
-        # Convertir Fecha Larga a ISO
-        if ',' in fecha_turno:
-            partes = fecha_turno.split(',')[1].strip().split(' ')
-            dia = int(partes[0])
-            mes_esp = partes[2]
-            año = int(partes[4])
-            meses = {
-                'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
-                'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
-                'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
-            }
-            fecha_turno_iso = f"{año}-{meses[mes_esp]:02d}-{dia:02d}"
-
-        logger.info(f"📅 Actualizando Calendario Visual para {fecha_turno_iso} ...")
-        actualizar_calendario_dia(fecha_turno_iso)
-        logger.info(f"✔ Calendario Visual Actualizado...")
+        logger.info(f"📅 Reconstruyendo Calendario Visual Completo...")
+        reconstruir_calendario_completo()
+        logger.info(f"✔ Calendario Visual Reconstruido Exitosamente...")
     except Exception as e:
-        logger.error(f"❌ ERROR Actualizando Calendario: {e} ...")
+        logger.error(f"❌ ERROR Reconstruyendo Calendario: {e} ...")
 
     return True
 
