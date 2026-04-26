@@ -403,7 +403,7 @@ def process_text_message(sender, text):
                 send_message(sender,
                              f"Horarios Disponibles para: {state['coiffeur']} ({icono_srv} {state['servicio']}) el {text}:\n\n"
                              f"{horarios_text}\n\n"
-                             "⚠️ Tenés 1 Minuto para Elegir y Confirmar Tú Reserva...\n\n"
+                             "⚠️ Tenés 03 Minutos para Elegir y Confirmar Tú Reserva...\n\n"
                              "Escribí el Horario que Preferís ( Ej.: 11:00 )...")
                 state['step'] = 4
             else:
@@ -511,7 +511,7 @@ def process_text_message(sender, text):
                         logger.error(f"ERROR: al Marcar Reserva como Expirada: {e}")
 
                     send_message(sender,
-                                 "⚠️ ⏰ Lo Siento, Tú Reserva Expiró ( Pasaron Más De 60 Segundos ),\n\nPor Favor Comenzá de Nuevo Escribiendo 'Turno'...")
+                                 "⚠️ ⏰ Lo Siento, Tú Reserva del Turno, Expiró ( Pasaron Más De 03 Minutos ),\n\nPor Favor Comenzá de Nuevo Escribiendo 'Turno'...")
                     conversations[sender] = {'step': 0}
                     return
 
