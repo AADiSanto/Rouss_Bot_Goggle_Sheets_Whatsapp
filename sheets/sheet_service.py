@@ -54,9 +54,15 @@ from pathlib import Path
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google.oauth2 import service_account
+from google.auth.transport.requests import Request
 from datetime import datetime
 import pytz
 import json
+import httplib2
+from google.auth.transport.httplib2 import AuthorizedHttp
+
+# Timeout en segundos para todas las llamadas a la API de Google.-
+GOOGLE_API_TIMEOUT = 20
 
 # Forzar La Carga de Variables Sí Existe un .env Local,
 # pero Railway Las Inyectará Directamente.-
@@ -196,8 +202,22 @@ if not service_account_email:
 #Debug para RailWay.-
 print("✅ Credenciales cargadas correctamente")
 
-# Cliente Sheets.-
-service = build('sheets', 'v4', credentials=creds)
+# ─────────────────────────────────────────────────────────────────────────────
+# Cliente Sheets con Timeout Explícito via httplib2.
+# Esto reemplaza el uso de socket.setdefaulttimeout() que NO es thread-safe
+# cuando APScheduler ejecuta jobs en hilos paralelos.
+# ─────────────────────────────────────────────────────────────────────────────
+def _build_google_service(api_name, version, credentials, timeout=GOOGLE_API_TIMEOUT):
+    """
+    Construye un cliente de Google API con timeout HTTP explícito.
+    cache_discovery=False evita problemas con el filesystem efímero de Railway.
+    """
+    http = httplib2.Http(timeout=timeout)
+    authorized_http = AuthorizedHttp(credentials, http=http)
+    return build(api_name, version, http=authorized_http, cache_discovery=False)
+
+
+service = _build_google_service('sheets', 'v4', creds)
 sheets = service.spreadsheets()
 
 tz = pytz.timezone(TIMEZONE)
@@ -441,8 +461,8 @@ def get_or_create_folder():
     FOLDER_NAME = f"{NOMBRE_EMPRESA}_Turnos_Coiffeur"
 
     try:
-        # Crear cliente de Drive API
-        drive_service = build('drive', 'v3', credentials=creds)
+        # Crear cliente de Drive API con timeout explícito
+        drive_service = _build_google_service('drive', 'v3', creds)
 
         # Buscar si la carpeta ya existe
         query = f"name='{FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
@@ -517,7 +537,7 @@ def find_spreadsheet_in_folder(folder_id, spreadsheet_name):
         str: ID de la Hoja si se Encuentra, None si no Existe
     """
     try:
-        drive_service = build('drive', 'v3', credentials=creds)
+        drive_service = _build_google_service('drive', 'v3', creds)
 
         # Buscar archivos de tipo Google Sheets en la carpeta
         query = (
@@ -657,7 +677,7 @@ def get_or_create_spreadsheet_for_year(year):
         # ----------------------------------------------------------------
         if folder_id:
             try:
-                drive_service = build('drive', 'v3', credentials=creds)
+                drive_service = _build_google_service('drive', 'v3', creds)
 
                 # Mover el archivo a la carpeta
                 file = drive_service.files().get(
@@ -694,7 +714,7 @@ def get_or_create_spreadsheet_for_year(year):
 
             if service_account_email:
                 # Crear cliente de Drive API usando las mismas credenciales
-                drive_service = build('drive', 'v3', credentials=creds)
+                drive_service = _build_google_service('drive', 'v3', creds)
 
                 # Compartir con permisos de Editor
                 permission = {
@@ -1931,7 +1951,7 @@ def smoke_test_append():
         raise
 
 
-#Ejecuta los Tests de Lectura y Append (Append es Opcional).-
+#Ejecuta los Tests de Lectura y Append ( Append és Opcional ).-
 def smoke_test():
     """Ejecuta los Tests de Lectura y Append ( Append es Opcional )"""
     print("=== Iniciando Smoke Test de Google Sheets ===")
