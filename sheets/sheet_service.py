@@ -40,8 +40,6 @@ import logging
 
 from dotenv import load_dotenv
 
-from sheets.scheduler_service import normalizar_hora
-
 logger = logging.getLogger(__name__)
 #Nó Imprimir los 'Emojis'.-
 logging.getLogger(__name__).handlers.clear()
