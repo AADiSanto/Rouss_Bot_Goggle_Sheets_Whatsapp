@@ -467,23 +467,28 @@ def iniciar_scheduler(interval_seconds: int = 6):
 
         logger.info(f"(scheduler) Job '{_JOB_ID}' Agregado al scheduler")
 
-    # -------------------------------------------------------------------------------------
-    # Nuevo Job: Actualiza Colores de Feriados Cada 15 Minutos ( Sólo Formato Visual ).-
-    # -------------------------------------------------------------------------------------
-    try:
-        from sheets.sheet_service import colorear_feriados
+        # -------------------------------------------------------------------------------------
+        # Nuevo Job: Actualiza Colores de Feriados Cada 15 Minutos ( Sólo Formato Visual ).-
+        # -------------------------------------------------------------------------------------
+        try:
+            from sheets.sheet_service import colorear_feriados
 
-        _SCHEDULER.add_job(colorear_feriados, 'interval',
-                           minutes=15, id='colorear_feriados')
-        logger.info(f"(scheduler) Job 'colorear_feriados' Agregado (cada 15 Minutos)...")
+            # AGREGAR: Wrapper para que Errores SSL Nó Crasheen el Job.-
+            def colorear_feriados_safe():
+                """Wrapper Seguro — Errores Transitorios Nó Detienen el Scheduler.-"""
+                try:
+                    colorear_feriados()
+                except Exception as e:
+                    logger.error(
+                        f"(scheduler) ERROR Transitorio en colorear_feriados "
+                        f"( Reintento en Próximo Ciclo ): {type(e).__name__}: {e}"
+                    )
 
-    except Exception as e:
-        logger.error(f"(scheduler) ERROR: al Agregar Job colorear_feriados: {e}")
+            _SCHEDULER.add_job(colorear_feriados_safe, 'interval',  # ← Usar wrapper.-
+                               minutes=15, id='colorear_feriados')
+            logger.info(f"(scheduler) Job 'colorear_feriados' Agregado ( Cada 15 Minutos )...")
 
-    _SCHEDULER.start()
-
-    logger.info(f"(scheduler) Iniciado con Job id='{_JOB_ID}', Intervalo {interval_seconds}s, tz={tz.zone}")
-
-    return _SCHEDULER
+        except Exception as e:
+            logger.error(f"(scheduler) ERROR: al Agregar Job colorear_feriados: {e}")
 
 
