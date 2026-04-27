@@ -18,7 +18,7 @@
 #
 #  *** Compilar en el Directorio del Programa desde PowerShell como Administrador ( Nó es Necesario ).-
 #
-#  ***     pyinstaller --onefile --noconsole Transistor_MosFET_Parámetros_Curva_Trabajo.py
+#  *** pyinstaller --onefile --noconsole Transistor_MosFET_Parámetros_Curva_Trabajo.py
 #
 #          Para Incluír un ícono en el .exe:
 #
@@ -28,9 +28,9 @@
 #
 #          Luego Converirlo de .svg a .ico en: https://convertico.com/es/svg-a-ico/
 #
-#  ***     pyinstaller --onefile --icon=MosFET.ico Transistor_MosFET_Parámetros_Curva_Trabajo.py
+#  *** pyinstaller --onefile --icon=MosFET.ico Transistor_MosFET_Parámetros_Curva_Trabajo.py
 #
-#  ***        El .exe Compilado Estará Dentro de la Carpeta "dist".-
+#  *** El .exe Compilado Estará Dentro de la Carpeta "dist".-
 #
 # *********************************************************************************************************************
 
@@ -43,6 +43,7 @@ import os
 import sys
 
 import logging
+
 logging.getLogger().handlers.clear()
 
 # Agregar el Directorio Raíz Al Path Para Imports.-
@@ -52,7 +53,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 if not os.path.exists('logs'):
     os.makedirs('logs')
 
-#Debug para RailWay.-
+# Debug para RailWay.-
 print("=== VARIABLES QUE RAILWAY ME ESTÁ PASANDO ===")
 # Esto imprimirá los nombres de las variables, pero no los valores secretos
 print(list(os.environ.keys()))
@@ -92,18 +93,19 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"⚠️  ERROR: al Configurar Hoja del Año: {e}")
 
-    # --------------------------------------------------------
-    # Colorear Hoja de Feriados Automáticamente al Iniciar.-
-    # --------------------------------------------------------
-    try:
-        colorear_feriados()
-        print("🎨 Coloreo Automático de Feriados Completado...")
-    except Exception as e:
-        print(f"⚠️  ERROR: al Colorear Feriados: {e}")
+    # -----------------------------------------------------------------------------------------
+    # NOTA: Nó Ejecutamos colorear_feriados() aquí de forma síncrona para Evitar Timeouts
+    # en RailWay. El Job yá está Programado en el Scheduler para ejecutarse en Background.-
+    # -----------------------------------------------------------------------------------------
 
     # Iniciar Scheduler ( Verificar Cada 30 Segundos... ).-
     scheduler = iniciar_scheduler(interval_seconds=30)
-    print(f"⏰ Scheduler Iniciado - Job Activo: {scheduler.get_jobs()}")
+
+    # ✅ Verificación de Seguridad para Evitar el AttributeError.-
+    if scheduler:
+        print(f"⏰ Scheduler Iniciado - Job Activo: {scheduler.get_jobs()}")
+    else:
+        print("⚠️  ADVERTENCIA: El Scheduler Nó sé Pudo Iniciar Correctamente...")
 
     # Ejecutar Flask Sín Debug para Producción, Usar use_reloader=False para que Sólo Exista ún Proceso.-
     app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)  # ✅ ún Sólo Proceso.-
