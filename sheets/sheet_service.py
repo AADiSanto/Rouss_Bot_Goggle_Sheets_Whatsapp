@@ -58,6 +58,7 @@ from datetime import datetime
 import pytz
 import json
 
+
 # Forzar La Carga de Variables Sí Existe un .env Local,
 # pero Railway Las Inyectará Directamente.-
 load_dotenv()
@@ -191,13 +192,20 @@ else:
 service_account_email = creds_data.get('client_email')
 
 if not service_account_email:
-    logger.warning("⚠️ ERROR: No se pudo obtener el email del service account")
+    logger.warning("⚠️ ERROR: Nó Sé Pudo Obtener él EMaiL del Service Account")
 
 #Debug para RailWay.-
-print("✅ Credenciales cargadas correctamente")
+print("✅ Credenciales EMaiL del Service Account, Cargadas Correctamente")
 
-# Cliente Sheets.-
-service = build('sheets', 'v4', credentials=creds)
+import httplib2
+import google_auth_httplib2
+
+# Http con Timeout para Evitar Cuelgues SSL en Railway / Python 3.13.-
+_http = httplib2.Http(timeout=30)
+_authorized_http = google_auth_httplib2.AuthorizedHttp(creds, http=_http)
+
+# Cliente Sheets con Transport Controlado ( Timeout SSL para Railway / Python 3.13 ).-
+service = build('sheets', 'v4', http=_authorized_http)
 sheets = service.spreadsheets()
 
 tz = pytz.timezone(TIMEZONE)
@@ -1772,7 +1780,6 @@ def colorear_feriados():
     • Feriados Activos (TRUE o vacío): Fondo Rojo Claro y texto Negrita.
     • Feriados Desactivados (FALSE / NO / 0): Fondo Blanco y texto normal.
     """
-
     # ----------------------------------------------------------------
     # Protección contra Timeouts: Limitar Ejecución.-
     # ----------------------------------------------------------------
@@ -1799,6 +1806,9 @@ def colorear_feriados():
         rows = result.get('values', []) or []
     except HttpError as e:
         logger.error(f"ERROR al Leer Pestaña de Feriados (colorear): {e}")
+        return
+    except Exception as e:
+        logger.error(f"ERROR / TIMEOUT al Leer Feriados (colorear): {type(e).__name__}: {e}")
         return
 
     sheet_id = obtener_sheet_id(FERIADOS_SHEET)
@@ -1857,14 +1867,10 @@ def colorear_feriados():
             }
         })
 
-    # Ejecutar Actualización Masiva (Sólo si Hay Algo que Aplicar)
+    # Ejecutar Actualización Masiva ( Sólo si Hay Algo que Aplicar ).-
     if requests:
         body = {"requests": requests}
         try:
-            # Agregar timeout de 30 segundos
-            import socket
-            socket.setdefaulttimeout(30)
-
             service.spreadsheets().batchUpdate(
                 spreadsheetId=SPREADSHEET_ID,
                 body=body
@@ -1872,12 +1878,10 @@ def colorear_feriados():
 
             logger.info(f"(DEBUG) Coloreado de {len(requests)} Filas en '{FERIADOS_SHEET}' Completado...")
 
-        except socket.timeout:
-            logger.error(f"TIMEOUT al Colorear Feriados (>30s). Operación Cancelada...")
         except HttpError as e:
             logger.error(f"ERROR al Colorear Feriados: {e}")
-        finally:
-            socket.setdefaulttimeout(None)  # Restaurar TimeOut por defecto.-
+        except Exception as e:               # ← Captura SSL, Timeout y Cualquier Otro Error.-
+            logger.error(f"ERROR / TIMEOUT al Colorear Feriados: {type(e).__name__}: {e}")
 
 
 # --------------------------------------------------------------------------------
