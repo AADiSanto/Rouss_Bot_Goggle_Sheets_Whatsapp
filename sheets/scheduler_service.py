@@ -74,6 +74,8 @@ from googleapiclient.errors import HttpError
 from sheets.sheet_service import read_sheet, update_row, append_row, tz, \
     reconstruir_calendario_completo, validar_fecha_hora_turno, ordenar_hoja, actualizar_calendario_dia
 
+from sheets.utils import normalizar_hora
+
 import logging
 logging.getLogger().handlers.clear()
 logger = logging.getLogger(__name__)
@@ -84,27 +86,6 @@ RESERVA_SECONDS = 180  # ← Cambiar de 120 a 180 Segundos = 03 Minutos.-
 # Scheduler Singleton para Evitar Múltiples Instancias en el Mismo Proceso.-
 _SCHEDULER = None
 _JOB_ID = 'liberar_reservas_expiradas'
-
-
-# ------------------------------------------------
-# HELPERS / NORMALIZACIÓN
-# ------------------------------------------------
-
-def normalizar_hora(hora_str):
-    try:
-        h, m = hora_str.strip().split(':')
-        return f"{int(h):02d}:{m}"
-    except:
-        return hora_str.strip()
-
-
-def hora_a_time(hora_str):
-    from datetime import datetime
-    try:
-        h, m = hora_str.strip().split(':')
-        return datetime.strptime(f"{int(h):02d}:{m}", "%H:%M").time()
-    except:
-        return None
 
 
 # Crea una Reserva Temporal del Turno, con Expiración de RESERVA_SECONDS Segundos.-
