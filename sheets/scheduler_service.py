@@ -491,4 +491,10 @@ def iniciar_scheduler(interval_seconds: int = 6):
         except Exception as e:
             logger.error(f"(scheduler) ERROR: al Agregar Job colorear_feriados: {e}")
 
+    # --- Iniciar y Retornar el Objeto ---
+    _SCHEDULER.start()
+    return _SCHEDULER
+
+
+
 
