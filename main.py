@@ -79,34 +79,33 @@ if __name__ == '__main__':
     print(f"📋 Webhook URL: http://localhost:{port}/webhook")
     print(f"❤️  Health Check: http://localhost:{port}/health")
 
-    # Iniciar scheduler SOLO sí nó Estamos en el Proceso de Reload de Flask.-
-    if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-        print("⏰ Iniciando Scheduler de Reservas...")
+    # Iniciar Scheduler ( use_reloader=False Garantiza ún Sólo Proceso ).-
+    print("⏰ Iniciando Scheduler de Reservas...")
 
-        # --------------------------------------------------------
-        # Configurar Hoja del Año Actual al Iniciar.-
-        # --------------------------------------------------------
-        try:
-            current_year = get_current_year()
-            set_active_spreadsheet(current_year)
-            print(f"📅 Hoja del Año {current_year} Configurada...")
-        except Exception as e:
-            print(f"⚠️  ERROR: al Configurar Hoja del Año: {e}")
+    # --------------------------------------------------------
+    # Configurar Hoja del Año Actual al Iniciar.-
+    # --------------------------------------------------------
+    try:
+        current_year = get_current_year()
+        set_active_spreadsheet(current_year)
+        print(f"📅 Hoja del Año {current_year} Configurada...")
+    except Exception as e:
+        print(f"⚠️  ERROR: al Configurar Hoja del Año: {e}")
 
-        # --------------------------------------------------------
-        # Colorear Hoja de Feriados Automáticamente al Iniciar.-
-        # --------------------------------------------------------
-        try:
-            colorear_feriados()
-            print("🎨 Coloreo Automático de Feriados Completado...")
-        except Exception as e:
-            print(f"⚠️  ERROR: al Colorear Feriados: {e}")
+    # --------------------------------------------------------
+    # Colorear Hoja de Feriados Automáticamente al Iniciar.-
+    # --------------------------------------------------------
+    try:
+        colorear_feriados()
+        print("🎨 Coloreo Automático de Feriados Completado...")
+    except Exception as e:
+        print(f"⚠️  ERROR: al Colorear Feriados: {e}")
 
-        # Iniciar Scheduler ( Verificar Cada 10 Segundos... ).-
-        scheduler = iniciar_scheduler(interval_seconds=30)  # ← Cambiar de 10 a 30.-
-        print(f"⏰ Scheduler Iniciado - Job Activo: {scheduler.get_jobs()}")
+    # Iniciar Scheduler ( Verificar Cada 30 Segundos... ).-
+    scheduler = iniciar_scheduler(interval_seconds=30)
+    print(f"⏰ Scheduler Iniciado - Job Activo: {scheduler.get_jobs()}")
 
-    # Ejecutar Flask sin debug para producción
-    app.run(host='0.0.0.0', port=port, debug=True)  # ✅ Usa True para desarrollo
+    # Ejecutar Flask Sín Debug para Producción, Usar use_reloader=False para que Sólo Exista ún Proceso.-
+    app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)  # ✅ ún Sólo Proceso.-
 
 
