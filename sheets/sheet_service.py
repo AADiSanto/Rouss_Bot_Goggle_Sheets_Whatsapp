@@ -40,6 +40,8 @@ import logging
 
 from dotenv import load_dotenv
 
+from sheets.scheduler_service import normalizar_hora
+
 logger = logging.getLogger(__name__)
 #Nó Imprimir los 'Emojis'.-
 logging.getLogger(__name__).handlers.clear()
@@ -1271,10 +1273,10 @@ def validar_horario_negocio(fecha, hora):
 
     Args:
         fecha: Fecha en formato ISO (YYYY-MM-DD)
-        hora: Hora en formato HH:MM
+        hora: Hora en formato HH:MM (puede venir como 9:00 o 09:00)
 
     Returns:
-        bool: True si está abierto, False si está cerrado
+        bool: True si está abierto
 
     Raises:
         ValueError: Si el negocio está cerrado
@@ -1283,7 +1285,19 @@ def validar_horario_negocio(fecha, hora):
 
     HORARIOS_SHEET = 'Turnos_Horarios_Negocio'
 
-    # Obtener día de la semana en español
+    # -----------------------------
+    # Helper local (robusto)
+    # -----------------------------
+    def _hora_a_time(h):
+        try:
+            hh, mm = h.strip().split(':')
+            return dt.strptime(f"{int(hh):02d}:{mm}", "%H:%M").time()
+        except:
+            return None
+
+    # -----------------------------
+    # Día de la semana
+    # -----------------------------
     fecha_obj = dt.strptime(fecha, "%Y-%m-%d")
     dia_semana_ing = fecha_obj.strftime('%A')
 
@@ -1299,8 +1313,17 @@ def validar_horario_negocio(fecha, hora):
 
     dia_semana = dias_es[dia_semana_ing]
 
+    # -----------------------------
+    # Convertir hora de entrada
+    # -----------------------------
+    hora_t = _hora_a_time(hora)
+    if not hora_t:
+        raise ValueError("Hora inválida.")
+
+    # -----------------------------
+    # Leer configuración
+    # -----------------------------
     try:
-        # Leer configuración de horarios
         full_range = _safe_range(HORARIOS_SHEET, 'A2:F10')
         result = sheets.values().get(
             spreadsheetId=SPREADSHEET_ID,
@@ -1309,15 +1332,17 @@ def validar_horario_negocio(fecha, hora):
         rows = result.get('values', []) or []
     except HttpError as e:
         logger.error(f"ERROR al Leer Horarios del Negocio: {e}")
-        return True  # Por defecto permitir si hay error
+        return True  # fallback permisivo
 
-    # Buscar configuración del día
+    # -----------------------------
+    # Buscar día
+    # -----------------------------
     for row in rows:
         if not row or len(row) < 1:
             continue
 
         if row[0].strip() == dia_semana:
-            # Verificar si el día está activo
+
             activo = row[5].strip().upper() if len(row) >= 6 else 'TRUE'
 
             if activo == 'FALSE':
@@ -1326,47 +1351,57 @@ def validar_horario_negocio(fecha, hora):
                     f"Por Favor Elegí Otra Fecha Disponible..."
                 )
 
-            # Obtener Horarios
-            hora_inicio_manana = row[1].strip() if len(row) >= 2 and row[1].strip() else None
-            hora_fin_manana = row[2].strip() if len(row) >= 3 and row[2].strip() else None
-            hora_inicio_tarde = row[3].strip() if len(row) >= 4 and row[3].strip() else None
-            hora_fin_tarde = row[4].strip() if len(row) >= 5 and row[4].strip() else None
+            # -----------------------------
+            # Convertir bloques a time
+            # -----------------------------
+            inicio_m = _hora_a_time(row[1]) if len(row) >= 2 and row[1].strip() else None
+            fin_m    = _hora_a_time(row[2]) if len(row) >= 3 and row[2].strip() else None
+            inicio_t = _hora_a_time(row[3]) if len(row) >= 4 and row[3].strip() else None
+            fin_t    = _hora_a_time(row[4]) if len(row) >= 5 and row[4].strip() else None
 
-            # Verificar Sí Lá Hora Está En Algún Bloque.-
             hora_valida = False
 
-            # Verificar Bloque Mañana.-
-            if hora_inicio_manana and hora_fin_manana:
-                if hora_inicio_manana <= hora < hora_fin_manana:
+            # -----------------------------
+            # Bloque mañana
+            # -----------------------------
+            if inicio_m and fin_m:
+                if inicio_m <= hora_t < fin_m:
                     hora_valida = True
 
-            # Verificar bloque Tarde.-
-            if hora_inicio_tarde and hora_fin_tarde:
-                if hora_inicio_tarde <= hora <= hora_fin_tarde:
+            # -----------------------------
+            # Bloque tarde
+            # -----------------------------
+            if inicio_t and fin_t:
+                if inicio_t <= hora_t <= fin_t:
                     hora_valida = True
 
+            # -----------------------------
+            # Fuera de horario
+            # -----------------------------
             if not hora_valida:
-                # Determinar Mensaje Según él Bloque.-
-                if hora_fin_manana and hora < hora_inicio_tarde if hora_inicio_tarde else False:
+
+                # Detectar horario de almuerzo
+                if fin_m and inicio_t and fin_m <= hora_t < inicio_t:
                     raise ValueError(
                         f"⚠️ Lo Siento, El Salón está Cerrado por Hora de Almuerzo...\n\n"
                         f"📅 Horarios de Atención {dia_semana}:\n"
-                        f"🌅 Mañana: {hora_inicio_manana} a {hora_fin_manana}\n"
-                        f"🌆 Tarde: {hora_inicio_tarde} a {hora_fin_tarde}\n\n"
+                        f"🌅 Mañana: {row[1]} a {row[2]}\n"
+                        f"🌆 Tarde: {row[3]} a {row[4]}\n\n"
                         f"Por Favor Elegí Otro Horario..."
                     )
-                else:
-                    raise ValueError(
-                        f"⚠️ Lo Siento, El Salón está Cerrado en ese Horario...\n\n"
-                        f"📅 Horarios de Atención {dia_semana}:\n"
-                        f"🌅 Mañana: {hora_inicio_manana or 'Cerrado'} a {hora_fin_manana or 'Cerrado'}\n"
-                        f"🌆 Tarde: {hora_inicio_tarde or 'Cerrado'} a {hora_fin_tarde or 'Cerrado'}\n\n"
-                        f"Por Favor Elegí Otro Horario..."
-                    )
+
+                # Fuera de rango total
+                raise ValueError(
+                    f"⚠️ Lo Siento, El Salón está Cerrado en ese Horario...\n\n"
+                    f"📅 Horarios de Atención {dia_semana}:\n"
+                    f"🌅 Mañana: {row[1] or 'Cerrado'} a {row[2] or 'Cerrado'}\n"
+                    f"🌆 Tarde: {row[3] or 'Cerrado'} a {row[4] or 'Cerrado'}\n\n"
+                    f"Por Favor Elegí Otro Horario..."
+                )
 
             return True
 
-    # Sí Nó Encuentra Configuración, Permitir Por Defecto.-
+    # Si no hay config → permitir
     return True
 
 
@@ -1389,9 +1424,9 @@ def check_availability(coiffeur, fecha, hora):
         )
         return texto.lower()
 
-    # Normalizar coiffeur y hora.-
+    # Normalizar coiffeur y hora (🔥 FIX IMPORTANTE)
     coiffeur_norm = _norm(coiffeur)
-    hora_norm = hora.strip()
+    hora_norm = normalizar_hora(hora)
 
     # Extraer Año de la Fecha y Configurar Hoja Activa.-
     try:
@@ -1407,46 +1442,54 @@ def check_availability(coiffeur, fecha, hora):
         print(str(e))
         return False
 
-    data = read_sheet()
+    # Leer datos UNA sola vez
+    try:
+        data = read_sheet()
+    except Exception as e:
+        logger.error(f"ERROR al Leer Turnos: {e}")
+        return False
+
+    # Mapa meses (evita redefinir en cada loop)
+    meses = {
+        'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+        'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+        'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+    }
 
     for row in data:
-        if len(row) >= 7:
+        if len(row) < 7:
+            continue
 
-            # Convertir Fecha Larga del Registro.-
-            try:
-                partes = row[4].split(',')[1].strip().split(' ')
-                dia = int(partes[0])
-                mes_esp = partes[2]
-                año = int(partes[4])
-                meses = {
-                    'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
-                    'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
-                    'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
-                }
-                fecha_normalizada = f"{año}-{meses[mes_esp]:02d}-{dia:02d}"
-            except:
-                fecha_normalizada = row[4].strip()
+        # Convertir Fecha Larga del Registro.-
+        try:
+            partes = row[4].split(',')[1].strip().split(' ')
+            dia = int(partes[0])
+            mes_esp = partes[2]
+            año = int(partes[4])
+            fecha_normalizada = f"{año}-{meses[mes_esp]:02d}-{dia:02d}"
+        except Exception:
+            fecha_normalizada = row[4].strip()
 
-            # Normalizar Coiffeur Desde la Hoja.-
-            row_coiffeur_norm = _norm(row[3])
+        # Normalizar Coiffeur Desde la Hoja.-
+        row_coiffeur_norm = _norm(row[3])
 
-            # Normalizar Estado.-
-            estado = row[6].strip().lower()
+        # Normalizar Estado.-
+        estado = row[6].strip().lower()
 
-            # Sólo 'confirmado' Significa Ocupado.-
-            ocupado = (estado == 'confirmado')
+        # Sólo 'confirmado' Significa Ocupado.-
+        if estado != 'confirmado':
+            continue
 
-            # Normalizar Hora de la Fila (por Sí Viene con Espacios).-
-            row_hora = row[5].strip()
+        # Normalizar Hora de la Fila.-
+        row_hora = normalizar_hora(row[5])
 
-            # Evaluar Disponibilidad.-
-            if (
-                row_coiffeur_norm == coiffeur_norm and
-                fecha_normalizada == fecha and
-                row_hora == hora_norm and
-                ocupado
-            ):
-                return False
+        # Evaluar Disponibilidad.-
+        if (
+            row_coiffeur_norm == coiffeur_norm and
+            fecha_normalizada == fecha and
+            row_hora == hora_norm
+        ):
+            return False
 
     return True
 
@@ -1633,8 +1676,10 @@ def reconstruir_calendario_completo():
 
     from datetime import datetime as _dt
 
-    # Recopilar todas las fechas únicas con al menos un turno Confirmado.-
-    fechas_iso_set = set()
+    # ----------------------------------------------------------------------------------
+    # 🔥 OPTIMIZACIÓN: AGRUPAR TURNOS CONFIRMADOS POR FECHA (UNA SOLA PASADA)
+    # ----------------------------------------------------------------------------------
+    turnos_por_fecha = {}
 
     for row in data:
         if len(row) < 7:
@@ -1647,18 +1692,22 @@ def reconstruir_calendario_completo():
             mes_esp = partes[2]
             anio_n = int(partes[4])
             fecha_iso = f"{anio_n}-{meses_num[mes_esp]:02d}-{dia_n:02d}"
-            fechas_iso_set.add(fecha_iso)
         except Exception:
             continue
 
-    if not fechas_iso_set:
+        if fecha_iso not in turnos_por_fecha:
+            turnos_por_fecha[fecha_iso] = []
+
+        turnos_por_fecha[fecha_iso].append(row)
+
+    # ----------------------------------------------------------------------------------
+
+    if not turnos_por_fecha:
         logger.info("Calendario: No hay turnos confirmados, nada que reconstruir.")
         return True
 
-    # Ordenar Las Fechas Cronológicamente, De Menor a Mayor.-
-    #fechas_ordenadas = sorted(fechas_iso_set)
-    # Ordenar Las Fechas Cronológicamente, Fechas Más Recientes Primero, de Mayor a Menor.-
-    fechas_ordenadas = sorted(fechas_iso_set, reverse=True)
+    # Ordenar Las Fechas Cronológicamente (Más Recientes Primero).-
+    fechas_ordenadas = sorted(turnos_por_fecha.keys(), reverse=True)
 
     num_columnas = 2 + len(staff_list)
     letra_fin = chr(64 + num_columnas)
@@ -1680,31 +1729,20 @@ def reconstruir_calendario_completo():
         # Inicializar grilla de horarios para esta fecha.-
         turnos_del_dia = {h: {s: 'Libre' for s in staff_list} for h in horarios}
 
-        # Llenar con los turnos confirmados de esta fecha.-
-        for row in data:
-            if len(row) < 7:
-                continue
-            if row[6].strip().lower() != 'confirmado':
-                continue
-            try:
-                partes = row[4].split(',')[1].strip().split(' ')
-                dia_n = int(partes[0])
-                mes_esp = partes[2]
-                anio_n = int(partes[4])
-                fecha_row = f"{anio_n}-{meses_num[mes_esp]:02d}-{dia_n:02d}"
-            except Exception:
-                continue
+        # ----------------------------------------------------------------------------------
+        # 🔥 USAMOS SOLO LOS TURNOS DE ESA FECHA (YA FILTRADOS)
+        # ----------------------------------------------------------------------------------
+        for row in turnos_por_fecha[fecha_iso]:
 
-            if fecha_row != fecha_iso:
-                continue
-
-            hora = row[5].strip()
+            hora = normalizar_hora(row[5])
             coiffeur = row[3].strip()
 
             if hora in horarios and coiffeur in staff_list:
                 nombre = row[0].strip()
                 servicio = row[2].strip()
                 turnos_del_dia[hora][coiffeur] = f"{nombre} – {coiffeur} – {servicio}"
+
+        # ----------------------------------------------------------------------------------
 
         # Fila separadora entre fechas (excepto antes de la primera).-
         if idx > 0:
@@ -1755,6 +1793,207 @@ def reconstruir_calendario_completo():
 def actualizar_calendario_dia(fecha):
     """Alias de compatibilidad — ahora reconstruye el calendario completo."""
     return reconstruir_calendario_completo()
+
+
+# Genera o Actualiza el Calendario Visual SOLO para una Fecha Específica.-
+def actualizar_calendario_dia(fecha_objetivo):
+    """
+    Actualiza únicamente el bloque correspondiente a una fecha en el calendario visual,
+    evitando reconstruir todo el calendario completo.
+
+    Parámetro:
+        fecha_objetivo (str): Fecha en formato largo o ISO.
+
+    Estrategia:
+      1) Normalizar fecha a ISO.
+      2) Leer turnos confirmados SOLO de esa fecha.
+      3) Generar bloque completo del día (19 filas).
+      4) Buscar si ya existe en calendario.
+      5) Reemplazar o insertar bloque.
+    """
+    CALENDARIO_SHEET = 'Turnos_Calendario_Visual'
+
+    horarios = [
+        '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+        '12:00', '12:30', '13:00', '14:00', '14:30', '15:00',
+        '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30'
+    ]
+
+    meses_num = {
+        'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+        'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+        'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+    }
+
+    DIAS = {
+        'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
+        'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado',
+        'Sunday': 'Domingo'
+    }
+    MESES = {
+        'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
+        'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
+        'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
+        'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
+    }
+
+    from datetime import datetime as _dt
+
+    # ------------------------------------------------------------
+    # Normalizar Fecha a ISO (YYYY-MM-DD).-
+    # ------------------------------------------------------------
+    try:
+        if ',' in fecha_objetivo:
+            partes = fecha_objetivo.split(',')[1].strip().split(' ')
+            fecha_iso = f"{int(partes[4])}-{meses_num[partes[2]]:02d}-{int(partes[0]):02d}"
+        else:
+            fecha_iso = fecha_objetivo
+    except Exception as e:
+        logger.error(f"ERROR Normalizando Fecha: {fecha_objetivo} - {e}")
+        return False
+
+    # ------------------------------------------------------------
+    # Leer STAFF.-
+    # ------------------------------------------------------------
+    try:
+        staff_data = sheets.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=_safe_range('Turnos_Staff_Negocio', 'A1:A50')
+        ).execute().get('values', [])
+
+        staff_list = [
+            fila[0].strip()
+            for fila in staff_data
+            if fila and fila[0].strip() != "" and fila[0].strip().lower() != "staff_nombres"
+        ]
+    except Exception as e:
+        logger.error(f"ERROR al Leer Staff: {e}")
+        return False
+
+    if not staff_list:
+        logger.error("ERROR: No Hay STAFF Definido...")
+        return False
+
+    # ------------------------------------------------------------
+    # Leer Turnos.-
+    # ------------------------------------------------------------
+    try:
+        data = read_sheet()
+    except Exception as e:
+        logger.error(f"ERROR al Leer Turnos: {e}")
+        return False
+
+    # ------------------------------------------------------------
+    # Filtrar SOLO turnos confirmados de la fecha.-
+    # ------------------------------------------------------------
+    turnos_dia = []
+
+    for row in data:
+        if len(row) < 7:
+            continue
+        if row[6].strip().lower() != 'confirmado':
+            continue
+
+        try:
+            partes = row[4].split(',')[1].strip().split(' ')
+            dia_n = int(partes[0])
+            mes_esp = partes[2]
+            anio_n = int(partes[4])
+            fecha_row = f"{anio_n}-{meses_num[mes_esp]:02d}-{dia_n:02d}"
+        except Exception:
+            continue
+
+        if fecha_row == fecha_iso:
+            turnos_dia.append(row)
+
+    # ------------------------------------------------------------
+    # Generar Fecha Larga.-
+    # ------------------------------------------------------------
+    _fecha_obj = _dt.strptime(fecha_iso, "%Y-%m-%d")
+    _dia_ing = _fecha_obj.strftime("%A")
+    _mes_ing = _fecha_obj.strftime("%B")
+
+    fecha_larga = (
+        f"{DIAS[_dia_ing]}, {_fecha_obj.day} "
+        f"de {MESES[_mes_ing]} de {_fecha_obj.year}"
+    )
+
+    # ------------------------------------------------------------
+    # Construir Grilla del Día.-
+    # ------------------------------------------------------------
+    turnos_grid = {h: {s: 'Libre' for s in staff_list} for h in horarios}
+
+    for row in turnos_dia:
+        hora = normalizar_hora(row[5])
+        coiffeur = row[3].strip()
+
+        if hora in horarios and coiffeur in staff_list:
+            nombre = row[0].strip()
+            servicio = row[2].strip()
+            turnos_grid[hora][coiffeur] = f"{nombre} – {coiffeur} – {servicio}"
+
+    bloque = []
+    for hora in horarios:
+        fila = [fecha_larga, hora]
+        for staff in staff_list:
+            fila.append(turnos_grid[hora][staff])
+        bloque.append(fila)
+
+    num_columnas = 2 + len(staff_list)
+    letra_fin = chr(64 + num_columnas)
+
+    # ------------------------------------------------------------
+    # Leer Calendario Actual para encontrar posición.-
+    # ------------------------------------------------------------
+    try:
+        calendario = sheets.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=_safe_range(CALENDARIO_SHEET, 'A1:Z5000')
+        ).execute().get('values', [])
+    except Exception as e:
+        logger.error(f"ERROR al Leer Calendario: {e}")
+        return False
+
+    fila_inicio = None
+
+    for i, row in enumerate(calendario):
+        if row and row[0] == fecha_larga:
+            fila_inicio = i + 1
+            break
+
+    # ------------------------------------------------------------
+    # Si existe → reemplazar bloque
+    # Si no → agregar al final
+    # ------------------------------------------------------------
+    try:
+        if fila_inicio:
+            rango = _safe_range(
+                CALENDARIO_SHEET,
+                f"A{fila_inicio}:{letra_fin}{fila_inicio + len(bloque) - 1}"
+            )
+        else:
+            fila_inicio = len(calendario) + 1
+            rango = _safe_range(
+                CALENDARIO_SHEET,
+                f"A{fila_inicio}:{letra_fin}{fila_inicio + len(bloque) - 1}"
+            )
+
+        sheets.values().update(
+            spreadsheetId=SPREADSHEET_ID,
+            range=rango,
+            valueInputOption='USER_ENTERED',
+            body={'values': bloque}
+        ).execute()
+
+        logger.info(
+            f"(calendario) Día Actualizado: {fecha_iso} en fila {fila_inicio}"
+        )
+
+        return True
+
+    except HttpError as e:
+        logger.error(f"ERROR al Actualizar Calendario Día: {e}")
+        return False
 
 
 def obtener_sheet_id(nombre_hoja):
