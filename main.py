@@ -34,6 +34,15 @@
 #
 # *********************************************************************************************************************
 
+# ---------------------------------------------------------------------------------
+# IMPORTANTE en Producción ( RAILWAY ):
+# En Producción Nó se usa en el Archivo "Procfile" "web: python main.py"
+# Railway Debe Arrancar con Gunicorn Usando:
+#     web: gunicorn -w 1 -k gthread -b 0.0.0.0:$PORT main:app
+#
+# Esto Evita Usar El Servidor De Desarrollo de Flask y Problemas de Concurrencia...
+# ---------------------------------------------------------------------------------
+
 """
 Punto de entrada principal del Bot de WhatsApp para turnos
 Inicializa el servidor Flask y el scheduler
@@ -107,7 +116,15 @@ if __name__ == '__main__':
     else:
         print("⚠️  ADVERTENCIA: El Scheduler Nó sé Pudo Iniciar Correctamente...")
 
-    # Ejecutar Flask Sín Debug para Producción, Usar use_reloader=False para que Sólo Exista ún Proceso.-
-    app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)  # ✅ ún Sólo Proceso.-
+    # ---------------------------------------------------------------------------------
+    # MODO LOCAL ( DEBUG ) vs PRODUCCIÓN ( RAILWAY )
+    # ---------------------------------------------------------------------------------
+    if SYSTEM_MODE == "demo" or SYSTEM_MODE == "debug":
+        print("🧪 Ejecutando en MODO DESARROLLO ( Flask Debug )...")
+        app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
+
+    else:
+        print("🚀 Ejecutando en PRODUCCIÓN ( Gunicorn debe Iniciar el Proceso )...")
+        # En Railway Gunicorn arranca la app, NO usar app.run()
 
 
