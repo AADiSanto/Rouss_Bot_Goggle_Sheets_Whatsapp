@@ -209,6 +209,30 @@ _authorized_http = google_auth_httplib2.AuthorizedHttp(creds, http=_http)
 service = build('sheets', 'v4', http=_authorized_http)
 sheets = service.spreadsheets()
 
+import threading
+
+# Storage por Hilo — Cada Hilo Flask / APScheduler Tiene su Propio Cliente SSL.-
+_thread_local = threading.local()
+
+
+# ------------------------------------------------------------------------------
+# Construye un Cliente Google Sheets Exclusivo para Cada Hilo.-
+# Evita la Condición de Carrera SSL entre Flask y APScheduler.-
+# httplib2.Http() NO es Thread-Safe — un Singleton Compartido Corrompe la
+# Capa SSL cuando dos Hilos lo Usan Simultáneamente ( [SSL] record layer failure ).-
+# ------------------------------------------------------------------------------
+def _build_service():
+    """
+    Retorna un Cliente de Google Sheets Exclusivo para Cada Hilo.-
+    Si el Hilo Nó Tiene Uno, lo Crea con su Propio httplib2.Http().-
+    Si Ocurre un Error SSL, sé Limpia para Forzar Reconexión en el Próximo Llamado.-
+    """
+    if not hasattr(_thread_local, 'service') or _thread_local.service is None:
+        _http_local = httplib2.Http(timeout=30)
+        _auth_local  = google_auth_httplib2.AuthorizedHttp(creds, http=_http_local)
+        _thread_local.service = build('sheets', 'v4', http=_auth_local)
+    return _thread_local.service
+
 tz = pytz.timezone(TIMEZONE)
 
 
@@ -950,7 +974,7 @@ def append_row(values):
     full_range = _safe_range(SHEET_NAME, 'A:N')  # ← CAMBIO: Hasta Columna N ( La N oculta es la Fecha para la Ordenación ).-
 
     try:
-        sheets.values().append(
+        _build_service().spreadsheets().values().append(
             spreadsheetId=SPREADSHEET_ID,
             range=full_range,
             valueInputOption='USER_ENTERED',
@@ -977,7 +1001,7 @@ def read_sheet(range_a1=None):
 
     full_range = _safe_range(SHEET_NAME, range_a1)  # ← MANTENER ESTA INDENTACIÓN.-
     try:
-        result = sheets.values().get(
+        result = _build_service().spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
             range=full_range
         ).execute()
@@ -1018,7 +1042,7 @@ def es_feriado(fecha):
     FERIADOS_SHEET = 'Turnos_Feriados'
     try:
         full_range = _safe_range(FERIADOS_SHEET, 'A2:D100')
-        result = sheets.values().get(
+        result = _build_service().spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
             range=full_range
         ).execute()
@@ -1057,7 +1081,7 @@ def update_row(row_index, values):
     full_range = _safe_range(SHEET_NAME, f'A{row_index}:N{row_index}')  # ← Columna N = FechaISO para la Ordenación de Fechas.-
 
     try:
-        sheets.values().update(
+        _build_service().spreadsheets().values().update(
             spreadsheetId=SPREADSHEET_ID,
             range=full_range,
             valueInputOption='USER_ENTERED',
@@ -1203,7 +1227,7 @@ def generar_horarios_disponibles_dia(fecha):
 
     try:
         full_range = _safe_range(HORARIOS_SHEET, 'A2:F10')
-        result = sheets.values().get(
+        result = _build_service().spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
             range=full_range
         ).execute()
@@ -1324,7 +1348,7 @@ def validar_horario_negocio(fecha, hora):
     # -----------------------------
     try:
         full_range = _safe_range(HORARIOS_SHEET, 'A2:F10')
-        result = sheets.values().get(
+        result = _build_service().spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
             range=full_range
         ).execute()
@@ -2136,7 +2160,7 @@ def obtener_staff_negocio():
 
     try:
         full_range = _safe_range(STAFF_SHEET, 'A2:A100')
-        result = sheets.values().get(
+        result = _build_service().spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
             range=full_range
         ).execute()
@@ -2172,7 +2196,7 @@ def obtener_servicios_negocio():
 
     try:
         # Leer Columnas A (Servicio), B (Activo), C (Icono)
-        service_data = sheets.values().get(
+        service_data = _build_service().spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
             range=_safe_range('Turnos_Servicios_Negocio', 'A2:C100')
         ).execute().get('values', [])
