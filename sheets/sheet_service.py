@@ -1740,8 +1740,12 @@ def reconstruir_calendario_completo():
         logger.info("Calendario: No hay turnos confirmados, nada que reconstruir.")
         return True
 
-    # Ordenar Las Fechas Cronológicamente (Más Recientes Primero).-
-    fechas_ordenadas = sorted(turnos_por_fecha.keys(), reverse=True)
+    # Ordenar: Hoy Primero → Fechas Futuras → Fechas Pasadas al Final.-
+    from datetime import date as _date
+    hoy_str = _date.today().strftime('%Y-%m-%d')
+    fechas_futuras = sorted([f for f in turnos_por_fecha.keys() if f >= hoy_str])
+    fechas_pasadas = sorted([f for f in turnos_por_fecha.keys() if f < hoy_str], reverse=True)
+    fechas_ordenadas = fechas_futuras + fechas_pasadas
 
     num_columnas = 2 + len(staff_list)
     letra_fin = chr(64 + num_columnas)
@@ -1824,214 +1828,17 @@ def reconstruir_calendario_completo():
 
 
 # Mantener alias para compatibilidad con cualquier llamada existente.-
-def actualizar_calendario_dia(fecha):
-    """Alias de compatibilidad — ahora reconstruye el calendario completo."""
+def actualizar_calendario_dia(fecha_objetivo):
+    """
+    Delegá a reconstruir_calendario_completo para Garantizar
+    Orden Correcto ( Hoy Primero ) y Separadores entre Fechas en Cada Confirmación.-
+    """
+    logger.info(f"(calendario) Delegando a reconstruir_calendario_completo para: {fecha_objetivo}")
     return reconstruir_calendario_completo()
 
 
-# Genera o Actualiza el Calendario Visual SOLO para una Fecha Específica.-
-def actualizar_calendario_dia(fecha_objetivo):
-    """
-    Actualiza únicamente el bloque correspondiente a una fecha en el calendario visual,
-    evitando reconstruir todo el calendario completo.
-
-    Parámetro:
-        fecha_objetivo (str): Fecha en formato largo o ISO.
-
-    Estrategia:
-      1) Normalizar fecha a ISO.
-      2) Leer turnos confirmados SOLO de esa fecha.
-      3) Generar bloque completo del día (19 filas).
-      4) Buscar si ya existe en calendario.
-      5) Reemplazar o insertar bloque.
-    """
-    CALENDARIO_SHEET = 'Turnos_Calendario_Visual'
-
-    horarios = [
-        '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-        '12:00', '12:30', '13:00', '14:00', '14:30', '15:00',
-        '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30'
-    ]
-
-    meses_num = {
-        'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
-        'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
-        'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
-    }
-
-    DIAS = {
-        'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
-        'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado',
-        'Sunday': 'Domingo'
-    }
-    MESES = {
-        'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
-        'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
-        'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
-        'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
-    }
-
-    from datetime import datetime as _dt
-
-    # ------------------------------------------------------------
-    # Normalizar Fecha a ISO (YYYY-MM-DD).-
-    # ------------------------------------------------------------
-    try:
-        if ',' in fecha_objetivo:
-            partes = fecha_objetivo.split(',')[1].strip().split(' ')
-            fecha_iso = f"{int(partes[4])}-{meses_num[partes[2]]:02d}-{int(partes[0]):02d}"
-        else:
-            fecha_iso = fecha_objetivo
-    except Exception as e:
-        logger.error(f"ERROR Normalizando Fecha: {fecha_objetivo} - {e}")
-        return False
-
-    # ------------------------------------------------------------
-    # Leer STAFF.-
-    # ------------------------------------------------------------
-    try:
-        staff_data = sheets.values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=_safe_range('Turnos_Staff_Negocio', 'A1:A50')
-        ).execute().get('values', [])
-
-        staff_list = [
-            fila[0].strip()
-            for fila in staff_data
-            if fila and fila[0].strip() != "" and fila[0].strip().lower() != "staff_nombres"
-        ]
-    except Exception as e:
-        logger.error(f"ERROR al Leer Staff: {e}")
-        return False
-
-    if not staff_list:
-        logger.error("ERROR: No Hay STAFF Definido...")
-        return False
-
-    # ------------------------------------------------------------
-    # Leer Turnos.-
-    # ------------------------------------------------------------
-    try:
-        data = read_sheet()
-    except Exception as e:
-        logger.error(f"ERROR al Leer Turnos: {e}")
-        return False
-
-    # ------------------------------------------------------------
-    # Filtrar SOLO turnos confirmados de la fecha.-
-    # ------------------------------------------------------------
-    turnos_dia = []
-
-    for row in data:
-        if len(row) < 7:
-            continue
-        if row[6].strip().lower() != 'confirmado':
-            continue
-
-        try:
-            partes = row[4].split(',')[1].strip().split(' ')
-            dia_n = int(partes[0])
-            mes_esp = partes[2]
-            anio_n = int(partes[4])
-            fecha_row = f"{anio_n}-{meses_num[mes_esp]:02d}-{dia_n:02d}"
-        except Exception:
-            continue
-
-        if fecha_row == fecha_iso:
-            turnos_dia.append(row)
-
-    # ------------------------------------------------------------
-    # Generar Fecha Larga.-
-    # ------------------------------------------------------------
-    _fecha_obj = _dt.strptime(fecha_iso, "%Y-%m-%d")
-    _dia_ing = _fecha_obj.strftime("%A")
-    _mes_ing = _fecha_obj.strftime("%B")
-
-    fecha_larga = (
-        f"{DIAS[_dia_ing]}, {_fecha_obj.day} "
-        f"de {MESES[_mes_ing]} de {_fecha_obj.year}"
-    )
-
-    # ------------------------------------------------------------
-    # Construir Grilla del Día.-
-    # ------------------------------------------------------------
-    turnos_grid = {h: {s: 'Libre' for s in staff_list} for h in horarios}
-
-    for row in turnos_dia:
-        hora = normalizar_hora(row[5])
-        coiffeur = row[3].strip()
-
-        if hora in horarios and coiffeur in staff_list:
-            nombre = row[0].strip()
-            servicio = row[2].strip()
-            turnos_grid[hora][coiffeur] = f"{nombre} – {coiffeur} – {servicio}"
-
-    bloque = []
-    for hora in horarios:
-        fila = [fecha_larga, hora]
-        for staff in staff_list:
-            fila.append(turnos_grid[hora][staff])
-        bloque.append(fila)
-
-    num_columnas = 2 + len(staff_list)
-    letra_fin = chr(64 + num_columnas)
-
-    # ------------------------------------------------------------
-    # Leer Calendario Actual para encontrar posición.-
-    # ------------------------------------------------------------
-    try:
-        calendario = sheets.values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=_safe_range(CALENDARIO_SHEET, 'A1:Z5000')
-        ).execute().get('values', [])
-    except Exception as e:
-        logger.error(f"ERROR al Leer Calendario: {e}")
-        return False
-
-    fila_inicio = None
-
-    for i, row in enumerate(calendario):
-        if row and row[0] == fecha_larga:
-            fila_inicio = i + 1
-            break
-
-    # ------------------------------------------------------------
-    # Si existe → reemplazar bloque
-    # Si no → agregar al final
-    # ------------------------------------------------------------
-    try:
-        if fila_inicio:
-            rango = _safe_range(
-                CALENDARIO_SHEET,
-                f"A{fila_inicio}:{letra_fin}{fila_inicio + len(bloque) - 1}"
-            )
-        else:
-            fila_inicio = len(calendario) + 1
-            rango = _safe_range(
-                CALENDARIO_SHEET,
-                f"A{fila_inicio}:{letra_fin}{fila_inicio + len(bloque) - 1}"
-            )
-
-        sheets.values().update(
-            spreadsheetId=SPREADSHEET_ID,
-            range=rango,
-            valueInputOption='USER_ENTERED',
-            body={'values': bloque}
-        ).execute()
-
-        logger.info(
-            f"(calendario) Día Actualizado: {fecha_iso} en fila {fila_inicio}"
-        )
-
-        return True
-
-    except HttpError as e:
-        logger.error(f"ERROR al Actualizar Calendario Día: {e}")
-        return False
-
-
 def obtener_sheet_id(nombre_hoja):
-    """Devuelve el SheetId (numérico) de una Pestaña, Requerido para BatchUpdate..."""
+    """Devuelve el SheetId ( numérico ) de una Pestaña, Requerido para BatchUpdate..."""
     try:
         spreadsheet = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
 
