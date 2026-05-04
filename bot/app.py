@@ -442,17 +442,38 @@ def process_text_message(sender, text):
                          f"⚠️ Lo Siento, El Salón Permanece Cerrado el {state['fecha_display']} por Día Nó Laborable o Feriado,\n\nPor Favor Elegí Otra Fecha Disponible...")
             return
 
-        if check_availability(state['coiffeur'], state['fecha'], hora):
+        # -----------------------------------------------------------------------
+        # BLOQUE PROTEGIDO: Errores de Red / SSL Nó Deben Silenciar al Bot.-
+        # -----------------------------------------------------------------------
+        try:
+            disponible = check_availability(state['coiffeur'], state['fecha'], hora)
+
+        except Exception as e:
+            logger.error(f"ERROR: al Verificar Disponibilidad ( check_availability ): {type(e).__name__}: {e}")
+            send_message(sender,
+                         "⚠️ Hubo un Problema de Conexión al Verificar el Horario...\n\n"
+                         "Por Favor Intentá Nuevamente Escribiendo el Mismo Horario...")
+            return
+
+        if disponible:
             state['hora'] = hora
 
             # Crear Reserva Provisional del Turno elegido por el Cliente.-
             nombre = state.get('nombre', 'Cliente')
             telefono = state.get('telefono', sender)
 
-            reservation_id = crear_reserva_provisional(
-                nombre, telefono, state['servicio'],
-                state['coiffeur'], state['fecha_larga'], hora
-            )
+            try:
+                reservation_id = crear_reserva_provisional(
+                    nombre, telefono, state['servicio'],
+                    state['coiffeur'], state['fecha_larga'], hora
+                )
+
+            except Exception as e:
+                logger.error(f"ERROR: al Crear Reserva Provisional: {type(e).__name__}: {e}")
+                send_message(sender,
+                             "⚠️ Hubo un Problema de Conexión al Generar Tú Reserva...\n\n"
+                             "Por Favor Intentá Nuevamente Escribiendo el Mismo Horario...")
+                return
 
             state['reservation_id'] = reservation_id
 
