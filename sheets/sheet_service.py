@@ -210,10 +210,12 @@ service = build('sheets', 'v4', http=_authorized_http)
 sheets = service.spreadsheets()
 
 import threading
-
 # Storage por Hilo — Cada Hilo Flask / APScheduler Tiene su Propio Cliente SSL.-
 _thread_local = threading.local()
 
+# Lock Global — Serializa Llamadas a Google API.-
+# Previene Segmentation Fault SSL en Python 3.13 con httplib2 Multi-Hilo.-
+_api_lock = threading.Lock()
 
 # ------------------------------------------------------------------------------
 # Construye un Cliente Google Sheets Exclusivo para Cada Hilo.-
@@ -974,13 +976,15 @@ def append_row(values):
     full_range = _safe_range(SHEET_NAME, 'A:N')  # ← CAMBIO: Hasta Columna N ( La N oculta es la Fecha para la Ordenación ).-
 
     try:
-        _build_service().spreadsheets().values().append(
-            spreadsheetId=SPREADSHEET_ID,
-            range=full_range,
-            valueInputOption='USER_ENTERED',
-            insertDataOption='INSERT_ROWS',
-            body=body
-        ).execute()
+        with _api_lock:
+            _build_service().spreadsheets().values().append(
+                spreadsheetId=SPREADSHEET_ID,
+                range=full_range,
+                valueInputOption='USER_ENTERED',
+                insertDataOption='INSERT_ROWS',
+                body=body
+            ).execute()
+
     except HttpError as e:
         print("ERROR: al append_row. Spreadsheet ID:", SPREADSHEET_ID)
         print("Rango Pedido:", full_range)
@@ -1001,10 +1005,11 @@ def read_sheet(range_a1=None):
 
     full_range = _safe_range(SHEET_NAME, range_a1)  # ← MANTENER ESTA INDENTACIÓN.-
     try:
-        result = _build_service().spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=full_range
-        ).execute()
+        with _api_lock:
+            result = _build_service().spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range=full_range
+            ).execute()
 
     except HttpError as e:
         print("ERROR al read_sheet. Spreadsheet ID:", SPREADSHEET_ID)
@@ -1042,10 +1047,12 @@ def es_feriado(fecha):
     FERIADOS_SHEET = 'Turnos_Feriados'
     try:
         full_range = _safe_range(FERIADOS_SHEET, 'A2:D100')
-        result = _build_service().spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=full_range
-        ).execute()
+        with _api_lock:
+            result = _build_service().spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range=full_range
+            ).execute()
+
         rows = result.get('values', []) or []
     except HttpError as e:
         logger.error(f"ERROR al Leer Pestaña de Feriados: {e}")
@@ -1081,12 +1088,14 @@ def update_row(row_index, values):
     full_range = _safe_range(SHEET_NAME, f'A{row_index}:N{row_index}')  # ← Columna N = FechaISO para la Ordenación de Fechas.-
 
     try:
-        _build_service().spreadsheets().values().update(
-            spreadsheetId=SPREADSHEET_ID,
-            range=full_range,
-            valueInputOption='USER_ENTERED',
-            body=body
-        ).execute()
+        with _api_lock:
+            _build_service().spreadsheets().values().update(
+                spreadsheetId=SPREADSHEET_ID,
+                range=full_range,
+                valueInputOption='USER_ENTERED',
+                body=body
+            ).execute()
+
     except HttpError as e:
         print("ERROR al Update_row. Spreadsheet ID:", SPREADSHEET_ID)
         print("Rango Pedido:", full_range)
@@ -1348,10 +1357,12 @@ def validar_horario_negocio(fecha, hora):
     # -----------------------------
     try:
         full_range = _safe_range(HORARIOS_SHEET, 'A2:F10')
-        result = _build_service().spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=full_range
-        ).execute()
+        with _api_lock:
+            result = _build_service().spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range=full_range
+            ).execute()
+
         rows = result.get('values', []) or []
     except HttpError as e:
         logger.error(f"ERROR al Leer Horarios del Negocio: {e}")
