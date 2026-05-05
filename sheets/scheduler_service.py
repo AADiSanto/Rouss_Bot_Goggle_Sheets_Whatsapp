@@ -72,9 +72,8 @@ from googleapiclient.errors import HttpError
 # Importamos Funciones de sheet_service (Lectura / Actualización).-
 # Asegurarse que sheets/sheet_service.py Nó Importe iniciar_scheduler al Importar Datos.-
 from sheets.sheet_service import read_sheet, update_row, append_row, tz, \
-    reconstruir_calendario_completo, validar_fecha_hora_turno, ordenar_hoja, actualizar_calendario_dia
-
-from sheets.utils import normalizar_hora
+    reconstruir_calendario_completo, validar_fecha_hora_turno, ordenar_hoja, \
+    actualizar_calendario_dia, _invalidar_servicio_hilo
 
 import logging
 logging.getLogger().handlers.clear()
@@ -409,12 +408,14 @@ def liberar_reservas_expiradas():
     # NO usar socket.setdefaulttimeout() aquí: no es thread-safe con APScheduler.
     try:
         data = read_sheet()
+
     except HttpError as e:
         logger.error(f"ERROR Leyendo Sheet en 'liberar_reservas_expiradas': {e}")
         return
+
     except Exception as e:
-        # Captura también TimeoutError, httplib2.ServerNotFoundError, etc.
         logger.error(f"ERROR / TIMEOUT al Leer Sheet: {type(e).__name__}: {e}")
+        _invalidar_servicio_hilo()
         return
 
     now = datetime.now(tz)
