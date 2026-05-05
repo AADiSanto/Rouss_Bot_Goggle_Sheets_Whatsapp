@@ -238,6 +238,11 @@ def _build_service():
 tz = pytz.timezone(TIMEZONE)
 
 
+def _invalidar_servicio_hilo():
+    """Fuerza Reconexión en el Próximo Llamado a _build_service().-"""
+    _thread_local.service = None
+
+
 # Generar el Nombre de la Hoja de Cálculo para un Año Específico.-
 def get_spreadsheet_name_for_year(year):
     """Genera el Nombre de la Hoja de Cálculo para un Año Específico"""
@@ -1466,7 +1471,8 @@ def check_availability(coiffeur, fecha, hora):
 
     # Extraer Año de la Fecha y Configurar Hoja Activa.-
     try:
-        year = int(fecha.split('-')[0])
+        fecha_iso = normalizar_fecha_a_iso(fecha)
+        year = int(fecha_iso.split('-')[0])
         set_active_spreadsheet(year)
     except Exception as e:
         logger.warning(f"Nó Sé Pudo Cambiar Hoja para Año en Fecha: {fecha}: {e}")
@@ -1881,16 +1887,21 @@ def colorear_feriados():
 
     try:
         full_range = _safe_range(FERIADOS_SHEET, 'A2:D100')
-        result = sheets.values().get(
+
+        result = _build_service().spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
             range=full_range
         ).execute()
+
         rows = result.get('values', []) or []
+
     except HttpError as e:
         logger.error(f"ERROR al Leer Pestaña de Feriados (colorear): {e}")
         return
+
     except Exception as e:
         logger.error(f"ERROR / TIMEOUT al Leer Feriados (colorear): {type(e).__name__}: {e}")
+        _invalidar_servicio_hilo()
         return
 
     sheet_id = obtener_sheet_id(FERIADOS_SHEET)
@@ -1953,7 +1964,7 @@ def colorear_feriados():
     if requests:
         body = {"requests": requests}
         try:
-            service.spreadsheets().batchUpdate(
+            _build_service().spreadsheets().batchUpdate(
                 spreadsheetId=SPREADSHEET_ID,
                 body=body
             ).execute()
