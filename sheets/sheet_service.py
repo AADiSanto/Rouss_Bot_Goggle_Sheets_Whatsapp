@@ -1236,10 +1236,12 @@ def generar_horarios_disponibles_dia(fecha):
 
     try:
         full_range = _safe_range(HORARIOS_SHEET, 'A2:F10')
-        result = _build_service().spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=full_range
-        ).execute()
+        with _api_lock:
+            result = _build_service().spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range=full_range
+            ).execute()
+
         rows = result.get('values', []) or []
     except HttpError as e:
         logger.error(f"ERROR al Leer Horarios del Negocio: {e}")
@@ -1556,10 +1558,11 @@ def elegir_coiffeur(preferencia, fecha, hora):
 
     # Leer STAFF Desde la Hoja Turnos_Staff_Negocio.-
     try:
-        staff_data = sheets.values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=_safe_range('Turnos_Staff_Negocio', 'A1:A50')
-        ).execute().get('values', [])
+        with _api_lock:
+            staff_data = _build_service().spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range=_safe_range('Turnos_Staff_Negocio', 'A1:A50')
+            ).execute().get('values', [])
 
         staff_list = [
             fila[0].strip()
@@ -1662,10 +1665,11 @@ def reconstruir_calendario_completo():
 
     # Leer STAFF desde "Turnos_Staff_Negocio".-
     try:
-        staff_data = sheets.values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=_safe_range('Turnos_Staff_Negocio', 'A1:A50')
-        ).execute().get('values', [])
+        with _api_lock:
+            staff_data = _build_service().spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range=_safe_range('Turnos_Staff_Negocio', 'A1:A50')
+            ).execute().get('values', [])
 
         staff_list = [
             fila[0].strip()
@@ -1740,12 +1744,8 @@ def reconstruir_calendario_completo():
         logger.info("Calendario: No hay turnos confirmados, nada que reconstruir.")
         return True
 
-    # Ordenar: Hoy Primero → Fechas Futuras → Fechas Pasadas al Final.-
-    from datetime import date as _date
-    hoy_str = _date.today().strftime('%Y-%m-%d')
-    fechas_futuras = sorted([f for f in turnos_por_fecha.keys() if f >= hoy_str])
-    fechas_pasadas = sorted([f for f in turnos_por_fecha.keys() if f < hoy_str], reverse=True)
-    fechas_ordenadas = fechas_futuras + fechas_pasadas
+    # Ordenar Descendente: Fecha Más Próxima / Futura Primero.-
+    fechas_ordenadas = sorted(turnos_por_fecha.keys(), reverse=True)
 
     num_columnas = 2 + len(staff_list)
     letra_fin = chr(64 + num_columnas)
@@ -1799,6 +1799,7 @@ def reconstruir_calendario_completo():
             spreadsheetId=SPREADSHEET_ID,
             range=_safe_range(CALENDARIO_SHEET, 'A1:Z5000')
         ).execute()
+
     except Exception as e:
         logger.error(f"ERROR al Limpiar Calendario Visual: {e}")
         return False
@@ -1809,6 +1810,7 @@ def reconstruir_calendario_completo():
             CALENDARIO_SHEET,
             f"A1:{letra_fin}{len(todas_las_filas)}"
         )
+
         sheets.values().update(
             spreadsheetId=SPREADSHEET_ID,
             range=rango_total,
