@@ -15,7 +15,7 @@
 #
 #  *** Compilar en el Directorio del Programa desde PowerShell como Administrador ( Nó es Necesario ).-
 #
-#  ***     pyinstaller --onefile --noconsole Transistor_MosFET_Parámetros_Curva_Trabajo.py
+#  *** pyinstaller --onefile --noconsole Transistor_MosFET_Parámetros_Curva_Trabajo.py
 #
 #          Para Incluír un ícono en el .exe:
 #
@@ -25,9 +25,9 @@
 #
 #          Luego Converirlo de .svg a .ico en: https://convertico.com/es/svg-a-ico/
 #
-#  ***     pyinstaller --onefile --icon=MosFET.ico Transistor_MosFET_Parámetros_Curva_Trabajo.py
+#  *** pyinstaller --onefile --icon=MosFET.ico Transistor_MosFET_Parámetros_Curva_Trabajo.py
 #
-#  ***        El .exe Compilado Estará Dentro de la Carpeta "dist".-
+#  *** El .exe Compilado Estará Dentro de la Carpeta "dist".-
 #
 # *********************************************************************************************************************
 
@@ -54,50 +54,30 @@ from pathlib import Path
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google.oauth2 import service_account
+
 from datetime import datetime
-import pytz
+
+# ZONAS HORARIAS CENTRALIZADAS ( MEMORY Ingeniería en Sistemas ):
+# Al Estar Ambos Archivos en la Misma Carpeta 'sheets/', sé Importa Directamente.-
+from sheets.utils import obtener_ahora, tz
+
 import json
 
+# Aquí También sé Puede Usar la Misma Lógica sí es el mismo archivo.-
 from sheets.utils import normalizar_hora
 
 # Forzar La Carga de Variables Sí Existe un .env Local,
 # pero Railway Las Inyectará Directamente.-
 load_dotenv()
 
-GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS_JSON")
-
-#Debug para RailWay
-print("🔥 INICIO sheet_service.py")
-creds_raw = os.getenv("GOOGLE_CREDENTIALS_JSON")
-print(f"DEBUG: Contenido de la Variable: {type(creds_raw)}")
-
-if not creds_raw:
-    # Si falla, intentamos buscarla sin importar mayúsculas/minúsculas por si acaso
-    for key in os.environ:
-        if key.upper() == "GOOGLE_CREDENTIALS_JSON":
-            creds_raw = os.environ[key]
-            break
-
-if creds_raw:
-    try:
-        info = json.loads(creds_raw)
-        creds = service_account.Credentials.from_service_account_info(info)
-        print("✅ Credenciales Cargadas Exitosamente Desde Variable de Entorno en RailWay...")
-    except Exception as e:
-        print(f"❌ Error al Parsear el JSON: {e}")
-        raise
-else:
-    # Si llegamos aquí, Railway realmente no la está pasando
-    raise RuntimeError("GOOGLE_CREDENTIALS_JSON Nó Encontrada én él Sistema...")
-
-
 # Construye la Ruta al Archivo credentials.json Relativo a éste Archivo ( sheets/ ).-
 HERE = Path(__file__).resolve().parent
 SERVICE_ACCOUNT_FILE = HERE / 'credentials.json'
 
+# ✅ Permisos desde Raíz de Google Drive:
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
-    'https://www.googleapis.com/auth/drive.file'  # Permisos para Compartir Archivos.-
+    'https://www.googleapis.com/auth/drive'  # Acceso completo para mover archivos a carpetas compartidas.-
 ]
 
 # SPREADSHEET_ID se Obtendrá Dinámicamente según el Año del Turno.-
@@ -105,20 +85,33 @@ SCOPES = [
 BASE_SPREADSHEET_ID = os.getenv('SPREADSHEET_ID_2026', '1tz0n1qkfOOLg2HkAMdK_sYfz-aQZsJxBuMCTu_FNWXo')
 
 # Nombre de la Empresa desde .env para Construir el Nombre de las Hojas.-
-#NOMBRE_EMPRESA = os.getenv('Nombre_de_la_Empresa', 'Rouss').strip()
 NOMBRE_EMPRESA = os.getenv('Nombre_de_la_Empresa', 'Rouss').strip()
+
+# ID de la Carpeta de Google Drive donde se Crean las Hojas Anuales.-
+DRIVE_FOLDER_ID = os.getenv('DRIVE_FOLDER_ID', '')
 
 SPREADSHEET_ID = BASE_SPREADSHEET_ID  # Se Actualizará Dinámicamente.-
 
 # Mapeo Manual de IDs por Año (Mientras Nó Implementemos Búsqueda en Google Drive).-
 SPREADSHEET_IDS_BY_YEAR = {
-    #2025: os.getenv('SPREADSHEET_ID_2025', '1zEUerYZ20wk1fgh1s1kse_eDb4SRxptFPgesAHKrPDw'),
     2026: os.getenv('SPREADSHEET_ID_2026', '1tz0n1qkfOOLg2HkAMdK_sYfz-aQZsJxBuMCTu_FNWXo'),
-    # 2026: 'ID_cuando_lo_crees', Se debe Copiar la Hoja de una Existente,
-    #                                Cambiar el Nombre y Asignar Permisos de Editor al EMaiL en
-    #                                'credentials.json'
-    # '"client_email": "rouss-whatsapp-bot-turnos-serv@rouss-whatsapp-bot-turnos.iam.gserviceaccount.com"'.-
 }
+
+# Cargar Dinámicamente IDs de Años Futuros Desde .env ( Local ) o Variables de Railway.-
+# Usamos obtener_ahora() para que el cálculo del año respete la zona horaria configurada.-
+_ahora_local = obtener_ahora()
+_año_actual = _ahora_local.year
+_año_siguiente = _año_actual + 1
+
+# Intentar Cargar ID del Año Actual Sí Nó Está en el Diccionario.-
+_id_año_actual = os.getenv(f'SPREADSHEET_ID_{_año_actual}', '').strip()
+if _id_año_actual:
+    SPREADSHEET_IDS_BY_YEAR[_año_actual] = _id_año_actual
+
+# Agrega Automáticamente el Año Siguiente Sí Está Configurado en las Variables de Entorno.-
+_id_año_siguiente = os.getenv(f'SPREADSHEET_ID_{_año_siguiente}', '').strip()
+if _id_año_siguiente:
+    SPREADSHEET_IDS_BY_YEAR[_año_siguiente] = _id_año_siguiente
 
 
 # Función para Guardar Nuevos IDs (persistencia simple en archivo).-
@@ -157,18 +150,43 @@ TIMEZONE = 'America/Argentina/Buenos_Aires'
 
 # Verificación: Archivo de Credenciales Presente para Prueba en Modo Local con NGrok.-
 # Leer variable UNA sola vez
+import os
+from google.oauth2 import service_account
+
+print("🔥 MODO CARGA CREDENCIALES")
+
+if os.getenv("RAILWAY_ENVIRONMENT"):
+    print("🔵 Usando Credenciales Desde VARIABLE DE ENTORNO ( Railway )...")
+
+    credentials_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+
+    if not credentials_json:
+        raise RuntimeError("GOOGLE_CREDENTIALS_JSON Nó Encontrado en Railway...")
+
+    import json
+    credentials_info = json.loads(credentials_json)
+
+    credentials = service_account.Credentials.from_service_account_info(
+        credentials_info
+    )
+
+else:
+    print("🟢 Usando credentials.json LOCAL")
+
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    cred_path = os.path.join(BASE_DIR, "credentials.json")
+
+    print(f"📄 Ruta Buscada: {cred_path}")
+
+    if not os.path.exists(cred_path):
+        raise RuntimeError(f"Archivo credentials.json Nó Encontrado en: {cred_path}")
+
+    credentials = service_account.Credentials.from_service_account_file(
+        cred_path
+    )
+
+
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON")
-
-# DEBUG ( Usa La Misma Variable ).-
-print("GOOGLE_CREDENTIALS_JSON existe?:", bool(GOOGLE_CREDENTIALS_JSON))
-print("LONGITUD:", len(GOOGLE_CREDENTIALS_JSON or ""))
-if GOOGLE_CREDENTIALS_JSON:
-    try:
-        json.loads(GOOGLE_CREDENTIALS_JSON)
-        print("✅ JSON Válido")
-    except Exception as e:
-        print("❌ JSON Inválido:", e)
-
 # Credenciales
 if GOOGLE_CREDENTIALS_JSON:
     creds_dict = json.loads(GOOGLE_CREDENTIALS_JSON)
@@ -328,8 +346,19 @@ def validar_fecha_hora_turno(fecha, hora=None):
     except Exception as e:
         raise ValueError(f"❌ ERROR: Formato de Fecha Inválido: {fecha}. Detalle: {str(e)}")
 
-    # Validar Año Actual.-
-    if fecha_dt.year != hoy.year:
+    # Validar Año Permitido Según Modo del Sistema.-
+    # En Modo DEMO se Permite el Año Siguiente para Pruebas.-
+    # En Producción Solo se Permite el Año Actual.-
+    modo = os.getenv("SYSTEM_MODE", "production").lower()
+    año_siguiente = hoy.year + 1
+
+    if fecha_dt.year == hoy.year:
+        pass  # Año Actual → Siempre Permitido.-
+
+    elif fecha_dt.year == año_siguiente and modo == "demo":
+        pass  # Año Siguiente → Permitido Sólo en Modo DEMO.-
+
+    else:
         raise ValueError(
             f"❌ ERROR: Sólo sé Permiten Turnos del Año Actual ({hoy.year}). "
             f"Fecha Recibida: {fecha_dt.year}"
@@ -472,12 +501,20 @@ def aplicar_formatos_hoja(service, spreadsheet_id, sheet_title):
 # --------------------------------------------------------------------------------
 def get_or_create_folder():
     """
-    Obtiene o Crea la Carpeta 'Rouss_Turnos_Coiffeur' en Google Drive.-
-    Comparte la Carpeta con el Service Account si es Nueva.-
+    Obtiene o Crea la Carpeta en Google Drive para Organizar Hojas Anuales.-
+    • Si DRIVE_FOLDER_ID Está Configurado en .env o Railway, lo Usa Directamente.-
+    • Si Nó Está Configurado, Busca la Carpeta por Nombre o la Crea Automáticamente.-
+    • Comparte la Carpeta con el Service Account si es Nueva.-
 
     Returns:
         str: ID de la Carpeta
     """
+    # ✅ Si Yá Está Configurado en .env ( Local ) o en Railway, Usarlo Directamente.-
+    # Evita Búsqueda en Drive y el Error 403 por Permisos Insuficientes.-
+    if DRIVE_FOLDER_ID:
+        logger.info(f"📁 Usando Carpeta Configurada en Variable de Entorno: {DRIVE_FOLDER_ID}")
+        return DRIVE_FOLDER_ID
+
     FOLDER_NAME = f"{NOMBRE_EMPRESA}_Turnos_Coiffeur"
 
     try:
@@ -595,8 +632,10 @@ def get_or_create_spreadsheet_for_year(year):
     Returns:
         str: ID de la Hoja de Cálculo
     """
+    # ✅ Definir Nombre Acá para que Esté Disponible en Todo el Scope de la Función.-
+    spreadsheet_name = get_spreadsheet_name_for_year(year)
+
     # Cargar IDs Guardados al Inicio.-
-    global json
     try:
         config_file = HERE / 'spreadsheet_ids.json'
         if config_file.exists():
@@ -674,50 +713,45 @@ def get_or_create_spreadsheet_for_year(year):
         folder_id = get_or_create_folder()
 
         # ----------------------------------------------------------------
-        # Crear Nueva Hoja DENTRO de la Carpeta.-
+        # Crear Nueva Hoja Copiando la Hoja Base del Año Actual.-
+        # Usar files().copy() en Lugar de spreadsheets().create() Para Evitar
+        # el Error 403 ( Los Service Accounts Nó Tienen Drive Propio Para Crear ).-
         # ----------------------------------------------------------------
-        spreadsheet = {
-            'properties': {
-                'title': spreadsheet_name
-            },
-            'sheets': [
-                {'properties': {'title': 'Turnos_Coiffeur'}},
-                {'properties': {'title': 'Turnos_Calendario_Visual'}},
-                {'properties': {'title': 'Turnos_Feriados'}},
-                {'properties': {'title': 'Turnos_Horarios_Negocio'}},
-                {'properties': {'title': 'Turnos_Staff_Negocio'}}
-            ]
-        }
+        drive_service = build('drive', 'v3', credentials=creds)
 
-        result = service.spreadsheets().create(body=spreadsheet).execute()
-        new_id = result['spreadsheetId']
-
-        # ----------------------------------------------------------------
-        # Mover la Hoja a la Carpeta (si se obtuvo el folder_id).-
-        # ----------------------------------------------------------------
+        # Metadatos de la Copia: Nombre y Carpeta Destino.-
+        copy_metadata = {'name': spreadsheet_name}
         if folder_id:
+            copy_metadata['parents'] = [folder_id]
+
+        # Copiar la Hoja Base ( BASE_SPREADSHEET_ID ) Como Plantilla.-
+        copied = drive_service.files().copy(
+            fileId=BASE_SPREADSHEET_ID,
+            body=copy_metadata,
+            fields='id'
+        ).execute()
+
+        new_id = copied['id']
+        logger.info(f"📋 Hoja Copiada Desde Base: {BASE_SPREADSHEET_ID} → Nueva: {new_id}")
+
+        # ----------------------------------------------------------------
+        # Limpiar Datos de las Pestañas ( Mantener Sólo Encabezados ).-
+        # La Copia Trae Todos los Datos del Año Anterior, hay que Borrarlos.-
+        # ----------------------------------------------------------------
+        tabs_to_clear = [
+            'Turnos_Coiffeur',
+            'Turnos_Calendario_Visual',
+            'Turnos_Feriados',
+        ]
+        for tab in tabs_to_clear:
             try:
-                drive_service = build('drive', 'v3', credentials=creds)
-
-                # Mover el archivo a la carpeta
-                file = drive_service.files().get(
-                    fileId=new_id,
-                    fields='parents'
+                service.spreadsheets().values().clear(
+                    spreadsheetId=new_id,
+                    range=f"'{tab}'!A2:Z10000"
                 ).execute()
-
-                previous_parents = ",".join(file.get('parents'))
-
-                drive_service.files().update(
-                    fileId=new_id,
-                    addParents=folder_id,
-                    removeParents=previous_parents,
-                    fields='id, parents'
-                ).execute()
-
-                logger.info(f"📂 Hoja Movida a Carpeta: {folder_id}")
-
+                logger.info(f"🧹 Datos Limpiados en Pestaña: '{tab}'")
             except Exception as e:
-                logger.warning(f"⚠️ No se Pudo Mover Hoja a Carpeta: {e}")
+                logger.warning(f"⚠️ Nó sé Pudieron Limpiar Datos de '{tab}': {e}")
         # ----------------------------------------------------------------
 
         logger.info(f"✅ Nueva Hoja Creada para el Año {year}: {new_id}")
@@ -870,6 +904,9 @@ def inicializar_encabezados(spreadsheet_id, sheet_name, tipo='turnos'):
     elif tipo == 'feriados':
         headers = [['Fecha', 'Motivo', 'Tipo', 'Activo']]
 
+    elif tipo == 'horarios':
+        headers = [['Día', 'Hora_Inicio_Mañana', 'Hora_Fin_Mañana', 'Hora_Inicio_Tarde', 'Hora_Fin_Tarde', 'Activo']]
+
     elif tipo == 'staff':
         headers = [['Staff_Nombres']]
 
@@ -886,6 +923,9 @@ def inicializar_encabezados(spreadsheet_id, sheet_name, tipo='turnos'):
 
         elif tipo == 'feriados':
             full_range = f"'{sheet_name}'!A1:D1"  # 04 Columnas.-
+
+        elif tipo == 'horarios':
+            full_range = f"'{sheet_name}'!A1:F1"  # 06 Columnas.-
 
         else:
             return
@@ -906,27 +946,87 @@ def inicializar_encabezados(spreadsheet_id, sheet_name, tipo='turnos'):
 def set_active_spreadsheet(year):
     global SPREADSHEET_ID
 
-    # ✅ PRIORIDAD 1: Usar Mapping Existente en (.env).-
     if year in SPREADSHEET_IDS_BY_YEAR:
         SPREADSHEET_ID = SPREADSHEET_IDS_BY_YEAR[year]
         print(f"✅ Usando Hoja del Mapping Para {year}: {SPREADSHEET_ID}")
         return SPREADSHEET_ID
 
-    # ⚠️ Sólo Sí Nó Existe → Crear o Buscar.-
-    if os.getenv("AUTO_CREATE_YEARLY_SHEETS", "false").lower() == "true":
+    # 👇 USAR VALIDACIÓN CORRECTA
+    if puede_crear_hoja(year):
         print(f"📂 Creando o Buscando Hoja Para {year}...")
 
-        # 👇 TU FUNCIÓN REAL
         new_id = get_or_create_spreadsheet_for_year(year)
 
         SPREADSHEET_ID = new_id
         return new_id
 
-    raise Exception(f"Nó Hay Hoja Configurada Para El Año {year}")
+    raise Exception(
+        f"🚫 ERROR: Nó Hay Hoja Configurada Ní Permitido Crearla Para él Año {year}"
+    )
 
 
 # Normalizar Nombre de Hoja.-
 SHEET_NAME = (SHEET_NAME or '').strip()
+
+# =========================================================
+# 🧠 VALIDACIONES DE NEGOCIO  ← 👈 NUEVO BLOQUE
+# =========================================================
+
+def puede_pedir_turno(year):
+    ahora = datetime.now(tz)
+    año_actual = ahora.year
+    mes_actual = ahora.month
+
+    modo = os.getenv("SYSTEM_MODE", "production").lower()
+
+    # Año Actual → Siempre Permitido.-
+    if year == año_actual:
+        return True
+
+    # Año Siguiente a la Fecha Actual.-
+    if year == año_actual + 1:
+        # Producción → Sólo Desde el Mes de Diciembre.-
+        if modo == "production":
+            return mes_actual == 12
+
+        # Demo → Permitir.-
+        if modo == "demo":
+            return True
+
+        # Disabled → Núnca Crear.-
+        if modo == "disabled":
+            return False
+
+    return False
+
+
+def puede_crear_hoja(year):
+    if os.getenv("AUTO_CREATE_YEARLY_SHEETS", "false").lower() != "true":
+        return False
+
+    ahora = datetime.now(tz)
+    año_actual = ahora.year
+    mes_actual = ahora.month
+
+    # Solo Permitir Año Siguiente a la Fecha Actual.-
+    if year != año_actual + 1:
+        return False
+
+    modo = os.getenv("SYSTEM_MODE", "production").lower()
+
+    # Producción → Sólo Desde el Mes de Diciembre.-
+    if modo == "production":
+        return mes_actual == 12
+
+    # Demo → Permitir.-
+    if modo == "demo":
+        return True
+
+    # Disabled → Núnca Crear.-
+    if modo == "disabled":
+        return False
+
+    return False
 
 
 # --- Verificación de la Existencia de la Hoja en el Spreadsheet.-
@@ -2075,10 +2175,13 @@ def smoke_test_read():
         raise
 
 
-#Intenta Agregar una Fila de Prueba Identificable al Final de la Hoja
+# Intenta Agregar una Fila de Prueba Identificable al Final de la Hoja
 def smoke_test_append():
     """Intenta Agregar una Fila de Prueba Identificable al Final de la Hoja"""
-    ts = datetime.now(tz).astimezone(tz).isoformat()
+    # Usamos el Motor de Tiempo de MEMORY Ingeniería en Sistemas.-
+    # obtener_ahora() ya devuelve el objeto localizado según el .env.-
+    ts = obtener_ahora().isoformat()
+
     test_row = ['__SMOKE_TEST__', ts]
     try:
         append_row(test_row)
