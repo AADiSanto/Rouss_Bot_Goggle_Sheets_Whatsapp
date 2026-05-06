@@ -253,8 +253,6 @@ def _build_service():
         _thread_local.service = build('sheets', 'v4', http=_auth_local)
     return _thread_local.service
 
-tz = pytz.timezone(TIMEZONE)
-
 
 def _invalidar_servicio_hilo():
     """Fuerza Reconexión en el Próximo Llamado a _build_service().-"""
