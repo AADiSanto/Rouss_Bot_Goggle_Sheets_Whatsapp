@@ -50,8 +50,11 @@ Inicializa el servidor Flask y el scheduler
 
 import os
 import sys
-
 import logging
+from dotenv import load_dotenv
+
+# 1. Cargar variables de entorno inmediatamente (En Railway no hace nada, en Local carga el .env).-
+load_dotenv()
 
 logging.getLogger().handlers.clear()
 
@@ -78,43 +81,43 @@ from sheets.sheet_service import colorear_feriados
 # Importar Obtener Año Activo.-
 from sheets.sheet_service import set_active_spreadsheet, get_current_year
 
+# 2. Definición Global de Modo y Puerto (Accesible para Railway y Local).-
 SYSTEM_MODE = os.getenv("SYSTEM_MODE", "disabled").lower()
+port = int(os.getenv('PORT', 5000))
 
 print(f"🚀 Sistema Iniciado en Modo: {SYSTEM_MODE.upper()}")
 
-if __name__ == '__main__':
-    port = int(os.getenv('PORT', 5000))
+# -------------------------------------------------------------------------
+# 3. Inicialización Global (Fuera del __main__ para que Gunicorn lo vea)
+# -------------------------------------------------------------------------
+try:
+    current_year = get_current_year()
+    set_active_spreadsheet(current_year)
+    print(f"📅 Hoja del Año {current_year} Configurada...")
+except Exception as e:
+    print(f"⚠️  ERROR: al Configurar Hoja del Año: {e}")
 
+# -----------------------------------------------------------------------------------------
+# NOTA: Nó Ejecutamos colorear_feriados() aquí de forma síncrona para Evitar Timeouts
+# en RailWay. El Job yá está Programado en el Scheduler para ejecutarse en Background.-
+# -----------------------------------------------------------------------------------------
+
+# Iniciar Scheduler ( Verificar Cada 30 Segundos... ).-
+print("⏰ Iniciando Scheduler de Reservas...")
+scheduler = iniciar_scheduler(interval_seconds=30)
+
+# ✅ Verificación de Seguridad para Evitar el AttributeError.-
+if scheduler:
+    print(f"⏰ Scheduler Iniciado - Job Activo: {scheduler.get_jobs()}")
+else:
+    print("⚠️  ADVERTENCIA: El Scheduler Nó sé Pudo Iniciar Correctamente...")
+
+
+if __name__ == '__main__':
+    # Este bloque solo se ejecuta en Desarrollo Local (PyCharm).-
     print(f"🚀 Iniciando Bot de WhatsApp en Puerto {port}...")
     print(f"📋 Webhook URL: http://localhost:{port}/webhook")
     print(f"❤️  Health Check: http://localhost:{port}/health")
-
-    # Iniciar Scheduler ( use_reloader=False Garantiza ún Sólo Proceso ).-
-    print("⏰ Iniciando Scheduler de Reservas...")
-
-    # --------------------------------------------------------
-    # Configurar Hoja del Año Actual al Iniciar.-
-    # --------------------------------------------------------
-    try:
-        current_year = get_current_year()
-        set_active_spreadsheet(current_year)
-        print(f"📅 Hoja del Año {current_year} Configurada...")
-    except Exception as e:
-        print(f"⚠️  ERROR: al Configurar Hoja del Año: {e}")
-
-    # -----------------------------------------------------------------------------------------
-    # NOTA: Nó Ejecutamos colorear_feriados() aquí de forma síncrona para Evitar Timeouts
-    # en RailWay. El Job yá está Programado en el Scheduler para ejecutarse en Background.-
-    # -----------------------------------------------------------------------------------------
-
-    # Iniciar Scheduler ( Verificar Cada 30 Segundos... ).-
-    scheduler = iniciar_scheduler(interval_seconds=30)
-
-    # ✅ Verificación de Seguridad para Evitar el AttributeError.-
-    if scheduler:
-        print(f"⏰ Scheduler Iniciado - Job Activo: {scheduler.get_jobs()}")
-    else:
-        print("⚠️  ADVERTENCIA: El Scheduler Nó sé Pudo Iniciar Correctamente...")
 
     # ---------------------------------------------------------------------------------
     # MODO LOCAL ( DEBUG ) vs PRODUCCIÓN ( RAILWAY )
@@ -126,5 +129,7 @@ if __name__ == '__main__':
     else:
         print("🚀 Ejecutando en PRODUCCIÓN ( Gunicorn debe Iniciar el Proceso )...")
         # En Railway Gunicorn arranca la app, NO usar app.run()
+
+
 
 
