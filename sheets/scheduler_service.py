@@ -15,7 +15,7 @@
 #
 #  *** Compilar en el Directorio del Programa desde PowerShell como Administrador ( Nó es Necesario ).-
 #
-#  ***     pyinstaller --onefile --noconsole Transistor_MosFET_Parámetros_Curva_Trabajo.py
+#  *** pyinstaller --onefile --noconsole Transistor_MosFET_Parámetros_Curva_Trabajo.py
 #
 #          Para Incluír un ícono en el .exe:
 #
@@ -25,9 +25,9 @@
 #
 #          Luego Converirlo de .svg a .ico en: https://convertico.com/es/svg-a-ico/
 #
-#  ***     pyinstaller --onefile --icon=MosFET.ico Transistor_MosFET_Parámetros_Curva_Trabajo.py
+#  *** pyinstaller --onefile --icon=MosFET.ico Transistor_MosFET_Parámetros_Curva_Trabajo.py
 #
-#  ***        El .exe Compilado Estará Dentro de la Carpeta "dist".-
+#  *** El .exe Compilado Estará Dentro de la Carpeta "dist".-
 #
 # *********************************************************************************************************************
 
@@ -41,15 +41,15 @@ import logging
 import uuid
 import socket
 import pytz
-from datetime import datetime, timedelta
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from googleapiclient.errors import HttpError
 
-# Importamos las constantes y servicios necesarios
-# Nota: Quitamos 'from bot.app import DIAS, MESES' si ya los Definimos Abajo.-
-# para evitar que cargue todo el bot antes de tiempo.-
+# Importamos las constantes y servicios necesarios.-
+from datetime import datetime, timedelta
 
-from datetime import datetime
+# ZONAS HORARIAS CENTRALIZADAS ( MEMORY Ingeniería en Sistemas ):
+from sheets.utils import obtener_ahora
 
 # Diccionarios en Castellano.-
 DIAS = {
@@ -63,14 +63,8 @@ MESES = {
     'September': 'Septiembre', 'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
 }
 
-from apscheduler.schedulers.background import BackgroundScheduler
-from googleapiclient.errors import HttpError
-
-# Importamos Funciones de bot.app
-#from bot.app import DIAS, MESES
-
 # Importamos Funciones de sheet_service (Lectura / Actualización).-
-# Asegurarse que sheets/sheet_service.py Nó Importe iniciar_scheduler al Importar Datos.-
+# Importamos 'tz' desde sheet_service para mantener la localización del motor.-
 from sheets.sheet_service import read_sheet, update_row, append_row, tz, \
     reconstruir_calendario_completo, validar_fecha_hora_turno, ordenar_hoja, \
     actualizar_calendario_dia, _invalidar_servicio_hilo
@@ -139,13 +133,15 @@ def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora)
     # ----------------------------------------------------
     reservation_id = str(uuid.uuid4())
 
+    # Usamos el Motor de Tiempo de MEMORY Ingeniería en Sistemas.-
+    now = obtener_ahora()
+
     # Timestamp de Expiración ( Guardado Como Texto en la Hoja ).-
-    ts_expira = (datetime.now(tz) + timedelta(seconds=RESERVA_SECONDS)).isoformat(sep=' ')
+    ts_expira = (now + timedelta(seconds=RESERVA_SECONDS)).isoformat(sep=' ')
 
     # ----------------------------------------------------
     # Fecha Registro en Castellano (Momento de Creación).-
     # ----------------------------------------------------
-    now = datetime.now(tz)
     dia_ing = now.strftime('%A')
     mes_ing = now.strftime('%B')
 
@@ -220,7 +216,8 @@ def confirmar_reserva(reservation_id):
         logger.error(f"❌ ERROR: al Leer Google Sheets: {type(e).__name__}: {e} ...")
         return False
 
-    ahora_confirmación = datetime.now(tz)
+    # Usamos el Motor de Tiempo de MEMORY Ingeniería en Sistemas.-
+    ahora_confirmación = obtener_ahora()
 
     # -------------------------------------------------------------------------------
     # 1) BUSCAR TODAS LAS FILAS QUE COINCIDAN CON EL reservation_id.-
@@ -340,7 +337,7 @@ def confirmar_reserva(reservation_id):
     row[6] = 'Confirmado'
     row[7] = 'FALSE'
 
-    momento_confirmación = datetime.now(tz)
+    momento_confirmación = ahora_confirmación
     dia_ing = momento_confirmación.strftime('%A')
     mes_ing = momento_confirmación.strftime('%B')
 
@@ -418,7 +415,8 @@ def liberar_reservas_expiradas():
         _invalidar_servicio_hilo()
         return
 
-    now = datetime.now(tz)
+    # Usamos el Motor de Tiempo de MEMORY Ingeniería en Sistemas.-
+    now = obtener_ahora()
 
     for i, row in enumerate(data, start=2):
         try:
@@ -438,7 +436,7 @@ def liberar_reservas_expiradas():
                     # Parsear timestamp que YA tiene Zona Horaria.-
                     ts = datetime.fromisoformat(timestamp_str)
 
-                    # Si por Alguna Razón Nó Tiene Zona Horaria, Agregarla.-
+                    # Si por Alguna Razón Nó Tiene Zona Horaria, Agregarla usando utils.tz.-
                     if ts.tzinfo is None:
                         ts = tz.localize(ts)
 
@@ -531,7 +529,7 @@ def iniciar_scheduler(interval_seconds: int = 6):
             logger.exception("(scheduler) ERROR: Comprobando scheduler Existente; sé Recreará...")
 
     # Crear Nuevo Scheduler.-
-    _SCHEDULER = BackgroundScheduler(timezone=tz.zone)
+    _SCHEDULER = BackgroundScheduler(timezone=tz)
 
     # Agregar Job Sí Nó Existe.-
     if not _SCHEDULER.get_job(_JOB_ID):
