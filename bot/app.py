@@ -22,6 +22,12 @@ Maneja la Lógica Conversacional y Flujo de Turnos.-
 """
 import logging
 
+import os
+
+print("🔍 SYSTEM_MODE:", os.getenv("SYSTEM_MODE"))
+print("🔍 FLASK_ENV:", os.getenv("FLASK_ENV"))
+
+
 # Diccionarios para Días y Meses en Castellano.-
 DIAS = {
     'Monday': 'Lunes',
@@ -100,8 +106,21 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from flask import Flask, request, jsonify
+
 import os
-from dotenv import load_dotenv
+
+from pathlib import Path
+
+if os.getenv("RAILWAY_ENVIRONMENT") is None:
+    from dotenv import load_dotenv
+
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    env_path = BASE_DIR / ".env"
+
+    print(f"📄 Cargando .env Desde: {env_path}")
+
+    load_dotenv(env_path)
+
 from datetime import datetime  # ← AGREGADO PARA TIMESTAMP
 
 from sheets.sheet_service import (
@@ -115,8 +134,6 @@ from sheets.scheduler_service import (
 )
 
 from bot.whatsapp_service import send_message, send_list_message
-
-load_dotenv()
 
 app = Flask(__name__)
 VERIFY_TOKEN = os.getenv('WEBHOOK_VERIFY_TOKEN')
