@@ -40,7 +40,6 @@ import inspect
 import logging
 import uuid
 import socket
-import pytz
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from googleapiclient.errors import HttpError
