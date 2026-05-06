@@ -507,7 +507,7 @@ def process_text_message(sender, text):
                          f"📅 Fecha: {state.get('fecha_dia_esp', '')} {state['fecha_display']}\n"
                          f"⏰ Hora: {hora}\n"
                          f"{icono_srv} Servicio: {state['servicio']}\n\n"
-                         f"⚠️ *IMPORTANTE:* Escribí 'CONFIRMAR' en los Próximos 60 Segundos para Asegurar Tú Turno...")
+                         f"⚠️ *IMPORTANTE:* Escribí 'CONFIRMAR' en los Próximos 180 Segundos ( 03 Minutos ), para Asegurar Tú Turno...")
             state['step'] = 5
 
         else:
