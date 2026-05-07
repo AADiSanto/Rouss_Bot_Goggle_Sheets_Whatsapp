@@ -37,6 +37,11 @@ except UnknownTimeZoneError:
     logger.error(f"(utils) Zona Horaria '{TZ_NAME}' Inválida en .env. Usando UTC por Defecto.-")
     tz = timezone('UTC')
 
+# ✅ LOG DE VERIFICACIÓN DE ZONA HORARIA
+# Este Mensaje Saldrá en PyCharm y en los Logs de RailWay.-
+print(f"🌍 CONFIGURACIÓN DE RED: Zona Horaria Detectada -> {tz.zone}")
+logger.info(f"Reloj del Sistema Sincronizado con: {tz.zone}")
+
 
 def obtener_ahora():
     """Retorna el Objeto Datetime Actual Siempre con la Zona Horaria Correcta.-"""
