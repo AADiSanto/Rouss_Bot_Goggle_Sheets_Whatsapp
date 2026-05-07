@@ -73,7 +73,7 @@ logging.getLogger().handlers.clear()
 logger = logging.getLogger(__name__)
 
 # Tiempo por Defecto para Expiración de Reserva ( en Segundos ).-
-RESERVA_SECONDS = 180  # ← Cambiar de 120 a 180 Segundos = 03 Minutos.-
+RESERVA_SECONDS = 60  # ← Cambiar de 33 a 60 Segundos = 01 Minutos.-
 
 # Scheduler Singleton para Evitar Múltiples Instancias en el Mismo Proceso.-
 _SCHEDULER = None
@@ -437,17 +437,17 @@ def liberar_reservas_expiradas():
                     f"(DEBUG) Procesando Fila {i}: Estado={row[6]}, Activo={row[7]}, Timestamp={timestamp_str}")
 
                 try:
-                    # Parsear timestamp que YA tiene Zona Horaria.-
+                    # Parsear timestamp de la hoja.-
                     ts = datetime.fromisoformat(timestamp_str)
-
-                    # Si por Alguna Razón Nó Tiene Zona Horaria, Agregarla usando utils.tz.-
                     if ts.tzinfo is None:
                         ts = tz.localize(ts)
 
-                    logger.debug(f"(DEBUG) Timestamp Parseado: {ts}, Comparando con: {now}")
+                    # ✅ CAMBIO: Calculamos el punto exacto de expiración usando la variable global
+                    limite_expiracion = ts + timedelta(seconds=RESERVA_SECONDS)
 
-                    if ts < now:
-                        logger.info(f"⚠️ Marcando Reserva {row[11]} como EXPIRADA...")
+                    # ✅ COMPARACIÓN: Si el límite ya pasó respecto a 'now'
+                    if limite_expiracion < now:
+                        logger.info(f"⚠️ Marcando Reserva {row[11]} como EXPIRADA (Superó los {RESERVA_SECONDS}s)...")
 
                         # -------------------------------------------------------
                         # REVALIDACIÓN ANTES DE ACTUALIZAR (CRÍTICO).-
