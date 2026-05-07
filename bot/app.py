@@ -516,53 +516,45 @@ def process_text_message(sender, text):
 
     elif step == 5:
         # ← ← ← ANTI-DUPLICADOS / REENVÍO AUTOMÁTICO DE WHATSAPP ← ← ←
-        # Si ya se confirmó anteriormente, NO volver a procesar.
         if state.get('confirmado') is True:
             return
 
-        # Sí Por Alguna Razón Nó Existe ID, Cancelar Proceso Silenciosamente.-
         if 'reservation_id' not in state:
             return
         # ← ← ← FIN ANTI-DUPLICADOS ← ← ←
 
-        # Confirmación Final del Turno Elegido por el Cliente.-
-        if 'confirmar' in text_lower:
+        # ✅ NUEVA VALIDACIÓN: Verificar si el tiempo ya expiró antes de procesar cualquier texto
+        if 'timestamp_reserva' in state:
             from datetime import datetime as dt_now
+            tiempo_transcurrido = (dt_now.now(tz) - state['timestamp_reserva']).total_seconds()
 
-            # Validar timeout de 60 segundos.-
-            if 'timestamp_reserva' in state:
-                tiempo_transcurrido = (dt_now.now(tz) - state['timestamp_reserva']).total_seconds()
-                logger.info(f"(DEBUG) Tiempo Transcurrido: {tiempo_transcurrido:.1f}s")
+            if tiempo_transcurrido > RESERVA_SECONDS:
+                try:
+                    from sheets.sheet_service import read_sheet, update_row
+                    data = read_sheet()
+                    for i, row in enumerate(data, start=2):
+                        if len(row) >= 13 and row[11] == state['reservation_id']:
+                            row[6] = 'Expirada'
+                            row[7] = 'FALSE'
+                            update_row(i, row)
+                            logger.info(f"Reserva {state['reservation_id']} Expirada detectada en app.py")
+                            break
+                except Exception as e:
+                    logger.error(f"ERROR: al Marcar Reserva como Expirada: {e}")
 
-                if tiempo_transcurrido > RESERVA_SECONDS:  # ← Usa la Constante del Scheduler que es de 01 Minuto.-
-                    try:
-                        from sheets.sheet_service import read_sheet, update_row
-                        data = read_sheet()
+                send_message(sender,
+                             "⚠️ ⏰ Lo Siento, Tú Reserva del Turno, Expiró ( Pasó Más De 01 Minuto ),\n\nPor Favor Comenzá de Nuevo Escribiendo 'Turno'...")
+                conversations[sender] = {'step': 0}
+                return
 
-                        for i, row in enumerate(data, start=2):
-                            if len(row) >= 13 and row[11] == state['reservation_id']:
-                                row[6] = 'Expirada'
-                                row[7] = 'FALSE'
-                                update_row(i, row)
-                                logger.info(f"Reserva {state['reservation_id']} Expirada por Timeout de Usuario/a...")
-                                break
-                    except Exception as e:
-                        logger.error(f"ERROR: al Marcar Reserva como Expirada: {e}")
-
-                    send_message(sender,
-                                 "⚠️ ⏰ Lo Siento, Tú Reserva del Turno, Expiró ( Pasó Más De 01 Minuto ),\n\nPor Favor Comenzá de Nuevo Escribiendo 'Turno'...")
-                    conversations[sender] = {'step': 0}
-                    return
-
+        # --- Procesar las palabras clave ---
+        if 'confirmar' in text_lower:
             # Confirmar la Reserva en Google Sheets.-
             success = confirmar_reserva(state['reservation_id'])
 
             if success:
-                # ← ← ← BLOQUEAR DUPLICADOS PARA SIEMPRE ← ← ←
                 state['confirmado'] = True
-
                 icono_srv = SERVICE_ICONS.get(state['servicio'], '✂️')
-
                 conversations[sender] = {'step': 0}
                 send_message(sender,
                              f"✔ ¡ TURNO CONFIRMADO !\n\n"
@@ -572,7 +564,6 @@ def process_text_message(sender, text):
                              f"{icono_srv} Servicio: {state['servicio']}\n\n"
                              f"¡ Té Esperamos ! Si Necesitás Cancelar o Modificar Tú Turno, Contactános, Gracias...")
                 return
-
             else:
                 conversations[sender] = {'step': 0}
                 send_message(sender,
@@ -580,18 +571,15 @@ def process_text_message(sender, text):
                 return
 
         elif 'cancelar' in text_lower:
-            # Marcar Reserva Temporal Como Cancelada.-
             if 'reservation_id' in state:
                 try:
                     from sheets.sheet_service import read_sheet, update_row
                     data = read_sheet()
-
                     for i, row in enumerate(data, start=2):
                         if len(row) >= 13 and row[11] == state['reservation_id']:
                             row[6] = 'Cancelada'
                             row[7] = 'FALSE'
                             update_row(i, row)
-                            logger.info(f"Reserva {state['reservation_id']} Cancelada por Usuario/a...")
                             break
                 except Exception as e:
                     logger.error(f"ERROR: al Cancelar Reserva: {e}")
@@ -601,10 +589,11 @@ def process_text_message(sender, text):
             return
 
         else:
+            # Si llegó aquí, es porque NO expiró y NO escribió confirmar/cancelar
             send_message(sender,
                          "⚠️ Tenés una Reserva Pendiente!!!\n\n"
-                                     "Por Favor, Respondé *'CONFIRMAR'* para Asegurar Tú Lugar o *'CANCELAR'*.\n"
-                                     "¡Recordá que Sólo Tenés 01 Minuto Desde qué Elegiste él Horario!...")
+                         "Por Favor, Respondé *'CONFIRMAR'* para Asegurar Tú Lugar o *'CANCELAR'*.\n"
+                         "¡Recordá que Sólo Tenés 01 Minuto Desde qué Elegiste él Horario!...")
 
 
 # Procesa Respuestas de Mensajes Interactivos ( Listas, Botones ).-
