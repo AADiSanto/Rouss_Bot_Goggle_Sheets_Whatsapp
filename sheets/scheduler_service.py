@@ -111,6 +111,7 @@ def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora)
     # ----------------------------------------
     # VALIDACIONES DEL NEGOCIO: Fecha y Hora.-
     # ----------------------------------------
+    from sheets.sheet_service import validar_fecha_hora_turno
     try:
         validar_fecha_hora_turno(fecha, hora)
     except ValueError as e:
@@ -136,6 +137,7 @@ def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora)
     now = obtener_ahora()
 
     # Timestamp de Expiración ( Guardado Como Texto en la Hoja ).-
+    # ✅ IMPORTANTE: Se usa para el cálculo de expiración en la Columna M
     ts_expira = (now + timedelta(seconds=RESERVA_SECONDS)).isoformat(sep=' ')
 
     # ----------------------------------------------------
@@ -169,27 +171,28 @@ def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora)
     except Exception:
         fecha_iso = ''
 
-    # ----------------------------------------------
-    # Fila Completa Para Insertar en Google Sheets.-
-    # ----------------------------------------------
+    # -----------------------------------------------------------------------------------
+    # Fila Completa Para Insertar en Google Sheets (Sincronizada con Nombres de Columnas)
+    # -----------------------------------------------------------------------------------
     values = [
-        nombre,            # A
-        telefono,          # B
-        servicio,          # C
-        coiffeur,          # D
-        fecha,             # E
-        hora,              # F
-        'Pendiente',       # G
-        'TRUE',            # H ← Activo
-        '',                # I - Valor_del_Servicio
-        '',                # J - SubTOTALES
-        fecha_registro,    # K
-        reservation_id,    # L
-        ts_expira,         # M - Expira
-        fecha_iso          # N ← FechaISO para Ordenar ( YYYY-MM-DD ).-
+        nombre,            # A (0): Nombre
+        telefono,          # B (1): Teléfono
+        servicio,          # C (2): Servicio
+        coiffeur,          # D (3): Coiffeur
+        fecha,             # E (4): Fecha
+        hora,              # F (5): Hora
+        'Pendiente',       # G (6): Estado
+        'TRUE',            # H (7): Activo
+        '',                # I (8): Valor_del_Servicio
+        '',                # J (9): SubTOTALES
+        fecha_registro,    # K (10): Fecha Registro
+        reservation_id,    # L (11): ReservationID
+        ts_expira,         # M (12): Timestamp Expiración
+        fecha_iso          # N (13): Fecha en Formato YYYY-MM-DD
     ]
 
     # Escritura en Google Sheets.-
+    from sheets.sheet_service import append_row
     append_row(values)
 
     return reservation_id
@@ -404,6 +407,7 @@ def liberar_reservas_expiradas():
     from sheets.sheet_service import read_sheet, update_row, _invalidar_servicio_hilo
     from bot.whatsapp_service import send_message
     from bot.app import conversations
+    from googleapiclient.errors import HttpError
 
     # El timeout ya está configurado en el cliente httplib2 dentro de sheet_service.
     # NO usar socket.setdefaulttimeout() aquí: no es thread-safe con APScheduler.
@@ -424,11 +428,12 @@ def liberar_reservas_expiradas():
 
     for i, row in enumerate(data, start=2):
         try:
+            # Validación: 6=Estado, 7=Activo, 12=Timestamp Expiración.-
             if len(row) >= 13 and row[6] == 'Pendiente' and (row[7] or '').upper() == 'TRUE':
 
                 timestamp_str = (row[12] or '').strip()
 
-                # Evitar filas corruptas o incompletas.-
+                # Evitar Filas Corruptas o Incompletas.-
                 if not timestamp_str:
                     logger.warning(f"⚠️ Fila {i} Sín TimeStamp Válido — Sé Omite...")
                     continue
@@ -442,11 +447,11 @@ def liberar_reservas_expiradas():
                     if ts.tzinfo is None:
                         ts = tz.localize(ts)
 
-                    # ✅ CAMBIO: Calculamos el punto exacto de expiración usando la variable global
+                    # ✅ CAMBIO: Calculamos el Punto Exacto de Expiración Usando la Variable Global.-
                     limite_expiracion = ts + timedelta(seconds=RESERVA_SECONDS)
 
                     # ✅ COMPARACIÓN: Si el límite ya pasó respecto a 'now'
-                    if limite_expiracion < now:
+                    if now > limite_expiracion:
                         logger.info(f"⚠️ Marcando Reserva {row[11]} como EXPIRADA (Superó los {RESERVA_SECONDS}s)...")
 
                         # -------------------------------------------------------
@@ -456,7 +461,7 @@ def liberar_reservas_expiradas():
                             data_actualizada = read_sheet()
                             fila_actual = data_actualizada[i - 2]
 
-                            if len(fila_actual) >= 7:
+                            if len(fila_actual) >= 8:
                                 estado_actual = fila_actual[6]
                                 activo_actual = (fila_actual[7] or '').upper()
 
@@ -471,13 +476,13 @@ def liberar_reservas_expiradas():
                             logger.error(f"ERROR Revalidando Fila {i}: {e}")
                             continue
 
-                        # Datos del cliente para notificación.-
-                        telefono_cliente = row[0]
+                        # ✅ AJUSTE DE ÍNDICE: Según tu lista, Teléfono es la columna 1 (segunda columna)
+                        telefono_cliente = str(row[1]).strip()
                         id_reserva = row[11]
 
                         # Marcar como Expirada.-
                         row[6] = 'Expirada'  # Cambiar Estado
-                        row[7] = 'FALSE'  # Desactivar
+                        row[7] = 'FALSE'     # Desactivar
 
                         # Asegurarse de que la Fila tenga Todas las Columnas.-
                         while len(row) < 13:
@@ -494,8 +499,8 @@ def liberar_reservas_expiradas():
 
                             # 2. Enviar mensaje de aviso de tiempo agotado.-
                             mensaje_aviso = (
-                                "⏰ *TIEMPO AGOTADO*: Tú Reserva Provisional há Expirado por Falta dé Confirmación.\n\n"
-                                "El Turno Vuelve a éstar Disponible. Sí Todavía Ló Querés, Escribí *'Turno'* Nuevamente para Empezar, Gracias.-"
+                                "⚠️ ⏰ *TIEMPO AGOTADO*: Tú Reserva Provisional ha Expirado por superar el límite de *01 Minuto*.\n\n"
+                                "El Turno Vuelve a Estar Disponible. Sí Todavía Lo Querés, Escribí *'Turno'* Nuevamente para Empezar, Gracias.-"
                             )
                             send_message(telefono_cliente, mensaje_aviso)
                             logger.info(f"📲 Notificación de Expiración Enviada a: {telefono_cliente}")
@@ -504,8 +509,8 @@ def liberar_reservas_expiradas():
                             logger.error(f"ERROR: Enviándo Notificación dé Expiración al Teléfono: {e_msg}")
 
                     else:
-                        tiempo_restante = (ts - now).total_seconds()
-                        logger.debug(f"( DEBUG ) Reserva {row[11]} aún Válida - Expira en {tiempo_restante:.0f}s")
+                        segundos_transcurridos = (now - ts).total_seconds()
+                        logger.debug(f"( DEBUG ) Reserva {row[11]} aún Válida - Quedan {RESERVA_SECONDS - segundos_transcurridos:.0f}s")
 
                 except ValueError as ve:
                     logger.error(f"ERROR: Parseando TimeStamp en Fila {i}: {timestamp_str} - {ve}")
