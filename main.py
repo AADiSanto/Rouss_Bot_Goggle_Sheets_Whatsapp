@@ -61,7 +61,10 @@ logging.getLogger().handlers.clear()
 # Agregar el Directorio Raíz Al Path Para Imports.-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# ✅ 1. Importar de Tiempo y Zona Horaria ( Protección contra conflicto de carpetas en Railway ).-
+# ✅ 1. Importar Lá Aplicación de Flask ARRIBA para que Gunicorn Lá Detecte de Inmediato.-
+from bot.app import app
+
+# ✅ 2. Importar de Tiempo y Zona Horaria ( Protección contra conflicto de carpetas en Railway ).-
 try:
     # Como ahora vive en sheets/utils.py, lo llamamos desde allí
     from sheets.utils import tz, obtener_ahora
@@ -82,7 +85,7 @@ except Exception as e:
     def obtener_ahora():
         return datetime.now(tz)
 
-# ✅ 2. Importación de Servicios ( Ahora que el path está Listo )
+# ✅ 3. Importación de Servicios ( Ahora que el path está Listo )
 from sheets.scheduler_service import iniciar_scheduler
 
 # Crear Carpeta De Logs Sí Nó Existe.-
@@ -95,23 +98,20 @@ print("=== VARIABLES QUE RAILWAY ME ESTÁ PASANDO ===")
 print(list(os.environ.keys()))
 print("=============================================")
 
-# Importar Lá Aplicación.-
-from bot.app import app
-
 # Importar Scheduler y Coloreo.-
 from sheets.sheet_service import colorear_feriados
 
 # Importar Obtener Año Activo.-
 from sheets.sheet_service import set_active_spreadsheet, get_current_year
 
-# 2. Definición Global de Modo y Puerto (Accesible para Railway y Local).-
+# 4. Definición Global de Modo y Puerto.-
 SYSTEM_MODE = os.getenv("SYSTEM_MODE", "disabled").lower()
 port = int(os.getenv('PORT', 5000))
 
 print(f"🚀 Sistema Iniciado en Modo: {SYSTEM_MODE.upper()}")
 
 # -------------------------------------------------------------------------
-# 3. Inicialización Global (Fuera del __main__ para que Gunicorn lo vea)
+# 5. Inicialización Global (Fuera del __main__ para que Gunicorn lo vea)
 # -------------------------------------------------------------------------
 try:
     current_year = get_current_year()
@@ -119,11 +119,6 @@ try:
     print(f"📅 Hoja del Año {current_year} Configurada...")
 except Exception as e:
     print(f"⚠️  ERROR: al Configurar Hoja del Año: {e}")
-
-# -----------------------------------------------------------------------------------------
-# NOTA: Nó Ejecutamos colorear_feriados() aquí de forma síncrona para Evitar Timeouts
-# en RailWay. El Job yá está Programado en el Scheduler para ejecutarse en Background.-
-# -----------------------------------------------------------------------------------------
 
 # Iniciar Scheduler ( Verificar Cada 30 Segundos... ).-
 print("⏰ Iniciando Scheduler de Reservas...")
@@ -156,4 +151,4 @@ if __name__ == '__main__':
         print("🚀 Ejecutando en PRODUCCIÓN ( Gunicorn debe Iniciar el Proceso )...")
         # En Railway Gunicorn arranca la app, NO usar app.run()
 
-
+        
