@@ -421,7 +421,7 @@ def process_text_message(sender, text):
                 send_message(sender,
                              f"Horarios Disponibles para: {state['coiffeur']} ({icono_srv} {state['servicio']}) el {dia_esp} {text}:\n\n"
                              f"{horarios_text}\n\n"
-                             "⚠️ Tenés 03 Minutos para Elegir y Confirmar Tú Reserva...\n\n"
+                             "⚠️ Tenés 01 Minuto para Elegir y Confirmar Tú Reserva...\n\n"
                              "Escribí el Horario que Preferís ( Ej.: 11:00 )...")
                 state['step'] = 4
             else:
@@ -507,7 +507,7 @@ def process_text_message(sender, text):
                          f"📅 Fecha: {state.get('fecha_dia_esp', '')} {state['fecha_display']}\n"
                          f"⏰ Hora: {hora}\n"
                          f"{icono_srv} Servicio: {state['servicio']}\n\n"
-                         f"⚠️ *IMPORTANTE:* Escribí 'CONFIRMAR' en los Próximos 180 Segundos ( 03 Minutos ), para Asegurar Tú Turno...")
+                         f"⚠️ *IMPORTANTE:* Escribí 'CONFIRMAR' en los Próximos 60 Segundos ( 01 Minuto ), para Asegurar Tú Turno...")
             state['step'] = 5
 
         else:
@@ -534,7 +534,7 @@ def process_text_message(sender, text):
                 tiempo_transcurrido = (dt_now.now(tz) - state['timestamp_reserva']).total_seconds()
                 logger.info(f"(DEBUG) Tiempo Transcurrido: {tiempo_transcurrido:.1f}s")
 
-                if tiempo_transcurrido > RESERVA_SECONDS:  # ← Usa la Constante del Scheduler que es de 03 Minutos.-
+                if tiempo_transcurrido > RESERVA_SECONDS:  # ← Usa la Constante del Scheduler que es de 01 Minuto.-
                     try:
                         from sheets.sheet_service import read_sheet, update_row
                         data = read_sheet()
@@ -550,7 +550,7 @@ def process_text_message(sender, text):
                         logger.error(f"ERROR: al Marcar Reserva como Expirada: {e}")
 
                     send_message(sender,
-                                 "⚠️ ⏰ Lo Siento, Tú Reserva del Turno, Expiró ( Pasaron Más De 03 Minutos ),\n\nPor Favor Comenzá de Nuevo Escribiendo 'Turno'...")
+                                 "⚠️ ⏰ Lo Siento, Tú Reserva del Turno, Expiró ( Pasó Más De 01 Minuto ),\n\nPor Favor Comenzá de Nuevo Escribiendo 'Turno'...")
                     conversations[sender] = {'step': 0}
                     return
 
@@ -602,7 +602,9 @@ def process_text_message(sender, text):
 
         else:
             send_message(sender,
-                         "Por Favor Escribí 'CONFIRMAR' Para Asegurar Tú Turno o 'CANCELAR' para Cancelar la Reserva...")
+                         "⚠️ Tenés una Reserva Pendiente!!!\n\n"
+                                     "Por Favor, Respondé *'CONFIRMAR'* para Asegurar Tú Lugar o *'CANCELAR'*.\n"
+                                     "¡Recordá que Sólo Tenés 01 Minuto Desde qué Elegiste él Horario!...")
 
 
 # Procesa Respuestas de Mensajes Interactivos ( Listas, Botones ).-
