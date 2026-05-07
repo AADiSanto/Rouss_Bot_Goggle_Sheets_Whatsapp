@@ -58,21 +58,25 @@ load_dotenv()
 
 logging.getLogger().handlers.clear()
 
-
 # Agregar el Directorio Raíz Al Path Para Imports.-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# ✅ 1. Importar de Tiempo y Zona Horaria Desde la Raíz del Proyecto.-
+# ✅ 1. Importar de Tiempo y Zona Horaria (Protección contra conflicto de carpetas en Railway).-
 try:
-    from utils import tz, obtener_ahora
+    import utils
+
+    # Forzamos la obtención de atributos para evitar el error de __init__.py
+    tz = getattr(utils, 'tz')
+    obtener_ahora = getattr(utils, 'obtener_ahora')
+
     ahora = obtener_ahora()
     # ✅ Este print confirmará que el main.py también ve la hora correcta
     print(f"🌍 CONFIGURACIÓN DE RED: Zona Horaria -> {tz.zone}")
     print(f"⏰ RELOJ DEL SISTEMA: {ahora.strftime('%d/%m/%Y %H:%M:%S')}")
 except Exception as e:
-    print(f"⚠️ ERROR: Al Importar utils en main: {e}")
+    print(f"⚠️ ERROR Crítico al Importar utils en main: {e}")
 
-# ✅ 2. Importación de servicios ( ahora que el path está listo
+# ✅ 2. Importación de servicios ( ahora que el path está listo )
 from sheets.scheduler_service import iniciar_scheduler
 
 # Crear Carpeta De Logs Sí Nó Existe.-
@@ -88,8 +92,7 @@ print("=============================================")
 # Importar Lá Aplicación.-
 from bot.app import app
 
-# Importar Scheduler.-
-from sheets.scheduler_service import iniciar_scheduler
+# Importar Scheduler y Coloreo.-
 from sheets.sheet_service import colorear_feriados
 
 # Importar Obtener Año Activo.-
@@ -118,14 +121,17 @@ except Exception as e:
 
 # Iniciar Scheduler ( Verificar Cada 30 Segundos... ).-
 print("⏰ Iniciando Scheduler de Reservas...")
-scheduler = iniciar_scheduler(interval_seconds=30)
+try:
+    scheduler = iniciar_scheduler(interval_seconds=30)
 
-# ✅ Verificación de Seguridad para Evitar el AttributeError.-
-if scheduler:
-    print(f"⏰ Scheduler Iniciado - Job Activo: {scheduler.get_jobs()}")
-else:
-    print("⚠️  ADVERTENCIA: El Scheduler Nó sé Pudo Iniciar Correctamente...")
-
+    # ✅ Verificación de Seguridad para evitar el AttributeError y confirmar Jobs
+    if scheduler:
+        print(f"⏰ Scheduler Iniciado - Jobs Activos: {[j.id for j in scheduler.get_jobs()]}")
+    else:
+        print("⚠️  ADVERTENCIA: El Scheduler Nó sé Pudo Iniciar Correctamente...")
+except Exception as e:
+    print(f"⚠️  ERROR Crítico al Arrancar el Scheduler: {e}")
+    scheduler = None
 
 if __name__ == '__main__':
     # Este bloque solo se ejecuta en Desarrollo Local (PyCharm).-
@@ -145,5 +151,4 @@ if __name__ == '__main__':
         # En Railway Gunicorn arranca la app, NO usar app.run()
 
 
-
-
+        
