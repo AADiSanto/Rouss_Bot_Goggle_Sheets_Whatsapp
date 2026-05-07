@@ -58,8 +58,22 @@ load_dotenv()
 
 logging.getLogger().handlers.clear()
 
+
 # Agregar el Directorio Raíz Al Path Para Imports.-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# ✅ 1. Importar de Tiempo y Zona Horaria Desde la Raíz del Proyecto.-
+try:
+    from utils import tz, obtener_ahora
+    ahora = obtener_ahora()
+    # ✅ Este print confirmará que el main.py también ve la hora correcta
+    print(f"🌍 CONFIGURACIÓN DE RED: Zona Horaria -> {tz.zone}")
+    print(f"⏰ RELOJ DEL SISTEMA: {ahora.strftime('%d/%m/%Y %H:%M:%S')}")
+except Exception as e:
+    print(f"⚠️ ERROR: Al Importar utils en main: {e}")
+
+# ✅ 2. Importación de servicios ( ahora que el path está listo
+from sheets.scheduler_service import iniciar_scheduler
 
 # Crear Carpeta De Logs Sí Nó Existe.-
 if not os.path.exists('logs'):
