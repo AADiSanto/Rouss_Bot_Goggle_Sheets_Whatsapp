@@ -61,22 +61,28 @@ logging.getLogger().handlers.clear()
 # Agregar el Directorio Raíz Al Path Para Imports.-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# ✅ 1. Importar de Tiempo y Zona Horaria (Protección contra conflicto de carpetas en Railway).-
+# ✅ 1. Importar de Tiempo y Zona Horaria ( Protección contra conflicto de carpetas en Railway ).-
 try:
-    import utils
-
-    # Forzamos la obtención de atributos para evitar el error de __init__.py
-    tz = getattr(utils, 'tz')
-    obtener_ahora = getattr(utils, 'obtener_ahora')
+    # Como ahora vive en sheets/utils.py, lo llamamos desde allí
+    from sheets.utils import tz, obtener_ahora
 
     ahora = obtener_ahora()
-    # ✅ Este print confirmará que el main.py también ve la hora correcta
+    # ✅ Este print Confirmará que el main.py También vé Lá Hora Correcta.-
     print(f"🌍 CONFIGURACIÓN DE RED: Zona Horaria -> {tz.zone}")
     print(f"⏰ RELOJ DEL SISTEMA: {ahora.strftime('%d/%m/%Y %H:%M:%S')}")
+
 except Exception as e:
     print(f"⚠️ ERROR Crítico al Importar utils en main: {e}")
+    # Fallback de emergencia por si algo falla en la ruta
+    from pytz import timezone
+    from datetime import datetime
 
-# ✅ 2. Importación de servicios ( ahora que el path está listo )
+    tz = timezone(os.getenv('TIMEZONE', 'America/Argentina/Buenos_Aires'))
+
+    def obtener_ahora():
+        return datetime.now(tz)
+
+# ✅ 2. Importación de Servicios ( Ahora que el path está Listo )
 from sheets.scheduler_service import iniciar_scheduler
 
 # Crear Carpeta De Logs Sí Nó Existe.-
@@ -151,4 +157,3 @@ if __name__ == '__main__':
         # En Railway Gunicorn arranca la app, NO usar app.run()
 
 
-        
