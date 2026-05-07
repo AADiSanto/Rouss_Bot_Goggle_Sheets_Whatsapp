@@ -48,7 +48,7 @@ from googleapiclient.errors import HttpError
 from datetime import datetime, timedelta
 
 # ZONAS HORARIAS CENTRALIZADAS ( MEMORY Ingeniería en Sistemas ):
-from sheets.utils import obtener_ahora
+from sheets.utils import logger, obtener_ahora, tz
 
 # Diccionarios en Castellano.-
 DIAS = {
@@ -392,7 +392,7 @@ def confirmar_reserva(reservation_id):
     return True
 
 
-#Busca y Marca como Expiradas Las Reservas que Superaron el Tiempo Límite.-
+# Busca y Marca como Expiradas Las Reservas que Superaron el Tiempo Límite.-
 def liberar_reservas_expiradas():
     """
     Busca y Marca como Expiradas las Reservas que Superaron el Tiempo Límite.
@@ -400,13 +400,18 @@ def liberar_reservas_expiradas():
     """
     logger.info(">>> 🔄 Ejecutando: 'liberar_reservas_expiradas()'...")
 
+    # Importaciones Locales para evitar circularidad y asegurar acceso a servicios.-
+    from sheets.sheet_service import read_sheet, update_row, _invalidar_servicio_hilo
+    from bot.whatsapp_service import send_message
+    from bot.app import conversations
+
     # El timeout ya está configurado en el cliente httplib2 dentro de sheet_service.
     # NO usar socket.setdefaulttimeout() aquí: no es thread-safe con APScheduler.
     try:
         data = read_sheet()
 
     except HttpError as e:
-        logger.error(f"ERROR Leyendo Sheet en 'liberar_reservas_expiradas': {e}")
+        logger.error(f"ERROR Leyendo Sheet en: 'liberar_reservas_expiradas': {e}")
         return
 
     except Exception as e:
@@ -466,16 +471,37 @@ def liberar_reservas_expiradas():
                             logger.error(f"ERROR Revalidando Fila {i}: {e}")
                             continue
 
+                        # Datos del cliente para notificación.-
+                        telefono_cliente = row[0]
+                        id_reserva = row[11]
+
                         # Marcar como Expirada.-
-                        row[6] = 'Expirada'   # Cambiar Estado
-                        row[7] = 'FALSE'      # Desactivar
+                        row[6] = 'Expirada'  # Cambiar Estado
+                        row[7] = 'FALSE'  # Desactivar
 
                         # Asegurarse de que la Fila tenga Todas las Columnas.-
                         while len(row) < 13:
                             row.append('')
 
                         update_row(i, row)
-                        logger.info(f"✅ Reserva {row[11]} Expirada Automáticamente (Fila {i})")
+                        logger.info(f"✅ Reserva {id_reserva} Expirada Automáticamente (Fila {i})")
+
+                        # ✅ NOTIFICACIÓN ACTIVA AL CLIENTE ( MEMORY Ingeniería en Sistemas ).-
+                        try:
+                            # 1. Resetear el estado de la conversación para que el bot no quede trabado.-
+                            if telefono_cliente in conversations:
+                                conversations[telefono_cliente] = {'step': 0}
+
+                            # 2. Enviar mensaje de aviso de tiempo agotado.-
+                            mensaje_aviso = (
+                                "⏰ *TIEMPO AGOTADO*: Tú Reserva Provisional há Expirado por Falta dé Confirmación.\n\n"
+                                "El Turno Vuelve a éstar Disponible. Sí Todavía Ló Querés, Escribí *'Turno'* Nuevamente para Empezar, Gracias.-"
+                            )
+                            send_message(telefono_cliente, mensaje_aviso)
+                            logger.info(f"📲 Notificación de Expiración Enviada a: {telefono_cliente}")
+
+                        except Exception as e_msg:
+                            logger.error(f"ERROR: Enviándo Notificación dé Expiración al Teléfono: {e_msg}")
 
                     else:
                         tiempo_restante = (ts - now).total_seconds()
@@ -499,6 +525,8 @@ def iniciar_scheduler(interval_seconds: int = 6):
     - Loguea el Módulo / Función que Solicitó el Inicio ( archivo:línea ).-
     - Por Defecto usa 6s para Testing; Pasár Otro Valor si sé Quiere Cambiarlo.-
     """
+    """Inicializa y Configura el Scheduler de Tareas en Segundo Plano."""
+
     global _SCHEDULER, _JOB_ID
 
     # Registrar el "caller" para depuración
@@ -573,6 +601,10 @@ def iniciar_scheduler(interval_seconds: int = 6):
 
         except Exception as e:
             logger.error(f"(scheduler) ERROR: al Agregar Job colorear_feriados: {e}")
+
+    # ✅ LOG DE PRECISIÓN: Para Ver en Lá Consola de RailWay / PyCharm Lá Hora Del Próximo Disparo.-
+    proxima_ejecucion = _SCHEDULER.get_job(_JOB_ID).next_run_time
+    logger.info(f"(scheduler) ✅ Reloj Sincronizado. Próximo Proceso de Reservas a Las: {proxima_ejecucion}")
 
     # --- Iniciar y Retornar el Objeto ---
     _SCHEDULER.start()
