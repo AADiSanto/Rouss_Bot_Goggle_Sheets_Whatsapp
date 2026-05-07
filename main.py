@@ -61,7 +61,11 @@ logging.getLogger().handlers.clear()
 # Agregar el Directorio Raíz Al Path Para Imports.-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# ✅ 1. Importar Lá Aplicación de Flask ARRIBA para que Gunicorn Lá Detecte de Inmediato.-
+# ✅ PASO CRÍTICO: Crear Carpeta De Logs ANTES de importar la App para evitar el FileNotFoundError.-
+if not os.path.exists('logs'):
+    os.makedirs('logs')
+
+# ✅ 1. Importar Lá Aplicación de Flask (Ahora sí, con la carpeta de logs ya creada para que bot.log no falle).-
 from bot.app import app
 
 # ✅ 2. Importar de Tiempo y Zona Horaria ( Protección contra conflicto de carpetas en Railway ).-
@@ -88,10 +92,6 @@ except Exception as e:
 # ✅ 3. Importación de Servicios ( Ahora que el path está Listo )
 from sheets.scheduler_service import iniciar_scheduler
 
-# Crear Carpeta De Logs Sí Nó Existe.-
-if not os.path.exists('logs'):
-    os.makedirs('logs')
-
 # Debug para RailWay.-
 print("=== VARIABLES QUE RAILWAY ME ESTÁ PASANDO ===")
 # Esto imprimirá los nombres de las variables, pero no los valores secretos
@@ -104,7 +104,7 @@ from sheets.sheet_service import colorear_feriados
 # Importar Obtener Año Activo.-
 from sheets.sheet_service import set_active_spreadsheet, get_current_year
 
-# 4. Definición Global de Modo y Puerto.-
+# 4. Definición Global de Modo y Puerto (Accesible para Railway y Local).-
 SYSTEM_MODE = os.getenv("SYSTEM_MODE", "disabled").lower()
 port = int(os.getenv('PORT', 5000))
 
@@ -119,6 +119,11 @@ try:
     print(f"📅 Hoja del Año {current_year} Configurada...")
 except Exception as e:
     print(f"⚠️  ERROR: al Configurar Hoja del Año: {e}")
+
+# -----------------------------------------------------------------------------------------
+# NOTA: Nó Ejecutamos colorear_feriados() aquí de forma síncrona para Evitar Timeouts
+# en RailWay. El Job yá está Programado en el Scheduler para ejecutarse en Background.-
+# -----------------------------------------------------------------------------------------
 
 # Iniciar Scheduler ( Verificar Cada 30 Segundos... ).-
 print("⏰ Iniciando Scheduler de Reservas...")
@@ -150,5 +155,6 @@ if __name__ == '__main__':
     else:
         print("🚀 Ejecutando en PRODUCCIÓN ( Gunicorn debe Iniciar el Proceso )...")
         # En Railway Gunicorn arranca la app, NO usar app.run()
+
 
         
