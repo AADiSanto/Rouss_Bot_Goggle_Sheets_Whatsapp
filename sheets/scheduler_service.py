@@ -602,14 +602,18 @@ def iniciar_scheduler(interval_seconds: int = 6):
         except Exception as e:
             logger.error(f"(scheduler) ERROR: al Agregar Job colorear_feriados: {e}")
 
-    # ✅ LOG DE PRECISIÓN: Para Ver en Lá Consola de RailWay / PyCharm Lá Hora Del Próximo Disparo.-
-    proxima_ejecucion = _SCHEDULER.get_job(_JOB_ID).next_run_time
-    logger.info(f"(scheduler) ✅ Reloj Sincronizado. Próximo Proceso de Reservas a Las: {proxima_ejecucion}")
-
-    # --- Iniciar y Retornar el Objeto ---
+    # --- Iniciar el Objeto ---
     _SCHEDULER.start()
+
+    # ✅ LOG DE PRECISIÓN (Movido aquí para evitar el AttributeError)
+    try:
+        job = _SCHEDULER.get_job(_JOB_ID)
+        if job:
+            proxima_ejecucion = job.next_run_time
+            logger.info(f"(scheduler) ✅ Reloj Sincronizado. Próximo Proceso de Reservas a Las: {proxima_ejecucion}")
+    except Exception as e:
+        logger.warning(f"(scheduler) Nó sé pudo obtener la próxima ejecución para el log: {e}")
+
     return _SCHEDULER
-
-
 
 
