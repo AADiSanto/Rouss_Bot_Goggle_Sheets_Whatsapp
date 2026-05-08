@@ -66,7 +66,7 @@ if not os.path.exists('logs'):
     os.makedirs('logs')
 
 # ✅ 1. Importar Lá Aplicación de Flask (Ahora sí, con la carpeta de logs ya creada para que bot.log no falle).-
-from bot.app import app
+from bot.app import app, NOMBRE_EMPRESA
 
 # ✅ 2. Importar de Tiempo y Zona Horaria ( Protección contra conflicto de carpetas en Railway ).-
 try:
@@ -139,22 +139,47 @@ except Exception as e:
     print(f"⚠️  ERROR Crítico al Arrancar el Scheduler: {e}")
     scheduler = None
 
-if __name__ == '__main__':
-    # Este bloque solo se ejecuta en Desarrollo Local (PyCharm).-
-    print(f"🚀 Iniciando Bot de WhatsApp en Puerto {port}...")
-    print(f"📋 Webhook URL: http://localhost:{port}/webhook")
-    print(f"❤️  Health Check: http://localhost:{port}/health")
+# ---------------------------------------------------------------------------------
+# INICIO DEL SISTEMA ( MEMORY Ingeniería en Sistemas )
+# ---------------------------------------------------------------------------------
 
-    # ---------------------------------------------------------------------------------
-    # MODO LOCAL ( DEBUG ) vs PRODUCCIÓN ( RAILWAY )
-    # ---------------------------------------------------------------------------------
-    if SYSTEM_MODE == "demo" or SYSTEM_MODE == "debug":
+# Iniciar Scheduler ( Verificar Cada 30 Segundos... ).-
+if SYSTEM_MODE != "production":
+    print("⏰ Iniciando Scheduler de Reservas...")
+
+try:
+    scheduler = iniciar_scheduler(interval_seconds=30)
+
+    # ✅ Verificación de Seguridad y Confirmación de Jobs.-
+    if scheduler:
+        if SYSTEM_MODE != "production":
+            print(f"⏰ Scheduler Iniciado - Jobs Activos: {[j.id for j in scheduler.get_jobs()]}")
+        else:
+            # En Producción un único mensaje limpio.-
+            print("🚀 Sistema de Gestión de Turnos: SCHEDULER ACTIVO.-")
+    else:
+        print("⚠️  ADVERTENCIA: El Scheduler Nó sé Pudo Iniciar Correctamente...")
+except Exception as e:
+    print(f"⚠️  ERROR Crítico al Arrancar el Scheduler: {e}")
+    scheduler = None
+
+if __name__ == '__main__':
+    # Mensaje de Bienvenida Profesional.-
+    print(f"\n***********************************************************************")
+    print(f"  BOT DE WHATSAPP - {NOMBRE_EMPRESA.upper()}")
+    print(f"  Modo de Ejecución: {SYSTEM_MODE.upper()}")
+    print(f"***********************************************************************\n")
+
+    # Este Bloque Sólo Muestra Detalles Técnicos én Desarrollo Local ( PyCharm ).-
+    if SYSTEM_MODE != "production":
+        print(f"🚀 Servidor Activo en Puerto: {port}")
+        print(f"📋 Webhook URL: http://localhost:{port}/webhook")
+        print(f"❤️  Health Check: http://localhost:{port}/health")
         print("🧪 Ejecutando en MODO DESARROLLO ( Flask Debug )...")
         app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
 
     else:
-        print("🚀 Ejecutando en PRODUCCIÓN ( Gunicorn debe Iniciar el Proceso )...")
-        # En Railway Gunicorn arranca la app, NO usar app.run()
+        # En Producción ( RailWay ) Arrancamos Sín Debug Para Estabilidad Absoluta.-
+        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
 
-        
