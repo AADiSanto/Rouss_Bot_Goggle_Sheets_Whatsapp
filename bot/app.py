@@ -24,8 +24,12 @@ import logging
 
 import os
 
-print("🔍 SYSTEM_MODE:", os.getenv("SYSTEM_MODE"))
-print("🔍 FLASK_ENV:", os.getenv("FLASK_ENV"))
+# --- Cargar Variables de Entorno ---
+NOMBRE_EMPRESA = os.getenv('Nombre_de_la_Empresa', 'Negocio') # 'Nombre del Negocio...'
+
+print("🔍 SYSTEM_MODE         :", os.getenv("SYSTEM_MODE"))
+print("🔍 FLASK_ENV           :", os.getenv("FLASK_ENV"))
+print("🔍 Nombre de la Empresa:", os.getenv("Nombre_de_la_Empresa"))
 
 
 # Diccionarios para Días y Meses en Castellano.-
@@ -226,6 +230,12 @@ def receive_message():
 # Procesa Mensajes de Texto Según el Estado de la Conversación.-
 def process_text_message(sender, text):
     """Procesa Mensajes de Texto Según el Estado de la Conversación"""
+    # ✅ VALIDACIÓN INICIAL:
+    # Sí él Texto está Vacío o es None ( Notificaciones dé Estado de Meta ), Salimos de la Función.-
+    if not text or not str(text).strip():
+        # logger.info(f"Ignorando mensaje vacío o notificación de estado de: {sender}")
+        return
+
     text_lower = text.lower()
 
     # Obtener o crear estado de conversación
@@ -253,9 +263,10 @@ def process_text_message(sender, text):
         # Generar Mensaje con Numeración Dinámica.-
         staff_list = '\n'.join([f"{i + 1}️⃣ {name}" for i, name in enumerate(staff_names)])
 
+        # ✅ Uso de Variable Dinámica NOMBRE_EMPRESA ( MEMORY Ingeniería en Sistemas ).-
         send_message(sender,
-                     f"¡Hola! 👋 Bienvenido a Melany Coiffeur's - ¿Con Qué Coiffeur Querés Tú Turno?...\n\n{staff_list}\n\nEscribí el Nombre del Coiffeur de Tú Preferencia.-")
-                            #f"¡Hola! 👋 Bienvenido a Rouss Coiffeur's - ¿Con Qué Coiffeur Querés Tú Turno?...\n\n{staff_list}\n\nEscribí el Nombre del Coiffeur de Tú Preferencia.-")
+                     f"¡Hola! 👋 Bienvenido a {NOMBRE_EMPRESA} Coiffeur's - ¿Con Qué Coiffeur Querés Tú Turno?...\n\n{staff_list}\n\nEscribí el Nombre del Coiffeur de Tú Preferencia.-")
+
         state['step'] = 1
 
     elif step == 1:
@@ -611,6 +622,33 @@ def health_check():
 
 
 if __name__ == '__main__':
-    # Permite Ejecutar Directamente el Módulo Python: python bot/app.py
+    # Obtención del puerto desde el entorno ( RailWay asigna uno automáticamente ).-
     port = int(os.getenv('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+
+    # ---------------------------------------------------------------------------------
+    # INICIO DEL SCHEDULER ( MEMORY Ingeniería en Sistemas )
+    # ---------------------------------------------------------------------------------
+    # El Scheduler es VITAL: és él Encargado de Liberar Los Turnos Sí él Cliente
+    # Nó Escribe "CONFIRMAR" en 60 Segundos.-
+    try:
+        # Sé Inicia él Scheduler para Limpiar Reservas Expiradas Cada 30 Segundos.-
+        iniciar_scheduler(interval_seconds=30)
+        logger.info("⏰ Scheduler Sincronizado Correctamente.-")
+    except Exception as e:
+        logger.error(f"❌ ERROR al Iniciar Scheduler: {e}")
+
+    # ---------------------------------------------------------------------------------
+    # EJECUCIÓN DE FLASK
+    # ---------------------------------------------------------------------------------
+    # Obtenemos él Modo de Ejecución Desde Las Variables dé Entorno.-
+    SYSTEM_MODE = os.getenv("SYSTEM_MODE", "disabled").lower()
+
+    if SYSTEM_MODE == "production":
+        # En Producción Desactivamos él 'use_reloader' Para Evitar Qué él
+        # Scheduler Sé Ejecute Dos Veces Por ERROR.-
+        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+    else:
+        # En Modo Local / Debug Permitimos él Auto-Recargado Para Desarrollo.-
+        app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
+
+
