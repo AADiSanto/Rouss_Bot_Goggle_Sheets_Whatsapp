@@ -55,8 +55,9 @@ from sheets.utils import logger, obtener_ahora
 # Esto Asegura Qué él Scheduler Encuentre Tanto 'sheets' como 'bot'.-
 current_dir = os.path.dirname(os.path.abspath(__file__)) # Carpeta 'sheets'.-
 project_root = os.path.dirname(current_dir)              # Raíz del Proyecto.-
+bot_dir = os.path.join(project_root, 'bot')              # Carpeta 'bot'.-
 
-for path in [current_dir, project_root]:
+for path in [current_dir, project_root, bot_dir]:
     if path not in sys.path:
         sys.path.append(path)
 
@@ -64,13 +65,13 @@ for path in [current_dir, project_root]:
 # IMPORTS DE SERVICIOS ( MEMORY Ingeniería en Sistemas ):
 # ---------------------------------------------------------------------------------
 try:
-    # Intentamos Importaciones Absolutas Primero.-
+    # Intentamos Importaciones Absolutas Primero ( Modo Producción Railway ).-
     from sheets.sheet_service import read_sheet, update_row
     from bot.whatsapp_service import send_message
-except ImportError:
+except (ImportError, ModuleNotFoundError):
     try:
-        # Sí Falla, Intentamos Relativas Gracias al sys.path Qué Forzamos.-
-        import sheet_service
+        # Sí Falla, Intentamos Importación Directa Gracias al sys.path Reforzado.-
+        from sheet_service import read_sheet, update_row
         from whatsapp_service import send_message
     except ImportError as e:
         logger.error(f"❌ ERROR de Referencia en Imports Locales: {e}")
