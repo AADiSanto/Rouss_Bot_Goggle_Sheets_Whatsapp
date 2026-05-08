@@ -426,9 +426,17 @@ def confirmar_reserva(reservation_id):
 def liberar_reservas_expiradas():
     """
     Busca y Marca como Expiradas las Reservas que Superaron el Tiempo Límite.
-    Ejecutado periódicamente por el scheduler.
+    Ejecutado Periódicamente Cada 120 Minutos por él scheduler.-
     """
-    logger.info(">>> 🔄 Ejecutando: 'liberar_reservas_expiradas()'...")
+    # ---------------------------------------------------------------------------------
+    # CONTROL DE LOGS ( RAILWAY ): 120 Ciclos de 30 Segundos = 01 Hora.-
+    # ---------------------------------------------------------------------------------
+    contador = getattr(liberar_reservas_expiradas, '_contador', 0)
+
+    if contador % 120 == 0:
+        logger.info(">>> 🔄 Estado: El Proceso 'liberar_reservas_expiradas()' Sigue Activo ( Resúmen Cada Hora )...")
+
+    liberar_reservas_expiradas._contador = contador + 1
 
     # ---------------------------------------------------------------------------------
     # ✅ SOLUCIÓN A REFERENCIAS ( MEMORY Ingeniería en Sistemas ):
@@ -586,15 +594,27 @@ def iniciar_scheduler(interval_seconds: int = 6):
         try:
             from sheets.sheet_service import colorear_feriados
 
-            # AGREGAR: Wrapper para que Errores SSL Nó Crasheen el Job.-
+            # Wrapper de Seguridad para colorear_feriados ( MEMORY Ingeniería en Sistemas ).-
             def colorear_feriados_safe():
-                """Wrapper Seguro — Errores Transitorios Nó Detienen el Scheduler.-"""
                 try:
+                    # -------------------------------------------------------------------------
+                    # CONTROL DE LOGS: 4 Ciclos dé 15 Minutos = 01 Hora.-
+                    # -------------------------------------------------------------------------
+                    contador = getattr(colorear_feriados_safe, '_contador', 0)
+
+                    # Ejecutamos Lá Función Dé Coloreo.-
                     colorear_feriados()
+
+                    if contador % 4 == 0:
+                        print(">>> 🎨 Estado: El Proceso 'colorear_feriados()' Sigue Activo ( Resúmen Cada Hora )...")
+
+                    colorear_feriados_safe._contador = contador + 1
+
                 except Exception as e:
+                    # Los errores SIEMPRE se informan de inmediato.-
                     logger.error(
-                        f"(scheduler) ERROR Transitorio en colorear_feriados "
-                        f"( Reintento en Próximo Ciclo ): {type(e).__name__}: {e}"
+                        f"(scheduler) ERROR Transitorio én colorear_feriados "
+                        f"( Reintento én Próximo Ciclo ): {type(e).__name__}: {e}"
                     )
 
             _SCHEDULER.add_job(
