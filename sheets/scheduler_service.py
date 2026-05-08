@@ -43,12 +43,6 @@ import sys
 import uuid
 import socket
 
-# ✅ FORZAR RUTA ( MEMORY Ingeniería en Sistemas ):
-# Esto Asegura Qué él Scheduler Encuentre 'sheet_service' Sín Importar Desde Dónde Sé Ejecute.
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.append(current_dir)
-
 from apscheduler.schedulers.background import BackgroundScheduler
 
 # Importamos las Constantes y Servicios Necesarios.-
@@ -57,16 +51,27 @@ from datetime import datetime, timedelta
 # ZONAS HORARIAS CENTRALIZADAS ( MEMORY Ingeniería en Sistemas ):
 from sheets.utils import logger, obtener_ahora
 
+# ✅ FORZAR RUTAS ( MEMORY Ingeniería en Sistemas ):
+# Esto Asegura Qué él Scheduler Encuentre Tanto 'sheets' como 'bot'.-
+current_dir = os.path.dirname(os.path.abspath(__file__)) # Carpeta 'sheets'.-
+project_root = os.path.dirname(current_dir)              # Raíz del Proyecto.-
+
+for path in [current_dir, project_root]:
+    if path not in sys.path:
+        sys.path.append(path)
+
 # ---------------------------------------------------------------------------------
-# IMPORTS DE SERVICIOS ( MEMORY Ingeniería en Sistemas )
+# IMPORTS DE SERVICIOS ( MEMORY Ingeniería en Sistemas ):
 # ---------------------------------------------------------------------------------
 try:
-    # Intento 1: Formato Para Ejecución Desde Lá Raíz ( RailWay / Producción ).-
+    # Intentamos Importaciones Absolutas Primero.-
     from sheets.sheet_service import read_sheet, update_row
+    from bot.whatsapp_service import send_message
 except ImportError:
-    # Intento 2: Formato Para Ejecución Local ó Testeo Directo en Pycharm y NGrok.-
     try:
-        from sheet_service import read_sheet, update_row, tz
+        # Sí Falla, Intentamos Relativas Gracias al sys.path Qué Forzamos.-
+        import sheet_service
+        from whatsapp_service import send_message
     except ImportError as e:
         logger.error(f"❌ ERROR de Referencia en Imports Locales: {e}")
 # ---------------------------------------------------------------------------------
