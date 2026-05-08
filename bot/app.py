@@ -96,15 +96,19 @@ def get_staff_names():
     return _STAFF_CACHE
 
 
+# ---------------------------------------------------------------------------------
+# CONFIGURACIÓN DE LOGS ( MEMORY Ingeniería en Sistemas ).-
+# ---------------------------------------------------------------------------------
+# Obtenemos él Modo Dé Ejecución Para Definir él Nivel de Logs.-
+SYSTEM_MODE = os.getenv("SYSTEM_MODE", "disabled").lower()
+
+# En Producción ( RailWay ) Usamos WARNING Para Evitar Saturar Registros.-
+# En Desarrollo ( PyCharm / NGrok ) Mantenemos INFO Para Supervisar él Flujo.-
+LOG_LEVEL = logging.WARNING if SYSTEM_MODE == "production" else logging.INFO
+
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('logs/bot.log'),
-        logging.StreamHandler()
-
-    ]
-
+    level=LOG_LEVEL,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
 logger = logging.getLogger(__name__)
