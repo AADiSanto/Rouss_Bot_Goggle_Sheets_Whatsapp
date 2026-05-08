@@ -38,8 +38,16 @@ Controla Expiración de Reservas de Turnos Temporales.-
 
 import inspect
 import logging
+import os
+import sys
 import uuid
 import socket
+
+# ✅ FORZAR RUTA ( MEMORY Ingeniería en Sistemas ):
+# Esto Asegura Qué él Scheduler Encuentre 'sheet_service' Sín Importar Desde Dónde Sé Ejecute.
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.append(current_dir)
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -47,7 +55,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
 
 # ZONAS HORARIAS CENTRALIZADAS ( MEMORY Ingeniería en Sistemas ):
-from sheets.utils import logger, obtener_ahora, tz
+from sheets.utils import logger, obtener_ahora
 
 # ---------------------------------------------------------------------------------
 # IMPORTS DE SERVICIOS ( MEMORY Ingeniería en Sistemas )
