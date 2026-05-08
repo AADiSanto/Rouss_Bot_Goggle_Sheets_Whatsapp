@@ -42,9 +42,8 @@ import uuid
 import socket
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from googleapiclient.errors import HttpError
 
-# Importamos las constantes y servicios necesarios.-
+# Importamos las Constantes y Servicios Necesarios.-
 from datetime import datetime, timedelta
 
 # ZONAS HORARIAS CENTRALIZADAS ( MEMORY Ingeniería en Sistemas ):
@@ -403,21 +402,23 @@ def liberar_reservas_expiradas():
     """
     logger.info(">>> 🔄 Ejecutando: 'liberar_reservas_expiradas()'...")
 
-    # Importaciones Locales para evitar circularidad y asegurar acceso a servicios.-
-    from sheets.sheet_service import read_sheet, update_row, _invalidar_servicio_hilo
-    from bot.whatsapp_service import send_message
-    from bot.app import conversations
-    from googleapiclient.errors import HttpError
-
-    # El timeout ya está configurado en el cliente httplib2 dentro de sheet_service.
-    # NO usar socket.setdefaulttimeout() aquí: no es thread-safe con APScheduler.
+    # ---------------------------------------------------------------------------------
+    # ✅ SOLUCIÓN A REFERENCIAS ( MEMORY Ingeniería en Sistemas ):
+    # Importamos AQUÍ adentro para evitar circularidad y asegurar que los módulos
+    # ya estén cargados en memoria al momento de la ejecución.-
+    # ---------------------------------------------------------------------------------
     try:
-        data = read_sheet()
-
-    except HttpError as e:
-        logger.error(f"ERROR Leyendo Sheet en: 'liberar_reservas_expiradas': {e}")
+        from sheet_service import read_sheet, update_row, _invalidar_servicio_hilo
+        from whatsapp_service import send_message
+        from app import conversations
+        from googleapiclient.errors import HttpError
+    except ImportError as e:
+        logger.error(f"❌ ERROR de Referencia en Imports Locales: {e}")
         return
 
+    # El timeout ya está configurado en el cliente httplib2 dentro de sheet_service.
+    try:
+        data = read_sheet()
     except Exception as e:
         logger.error(f"ERROR / TIMEOUT al Leer Sheet: {type(e).__name__}: {e}")
         _invalidar_servicio_hilo()
@@ -429,91 +430,66 @@ def liberar_reservas_expiradas():
     for i, row in enumerate(data, start=2):
         try:
             # Validación: 6=Estado, 7=Activo, 12=Timestamp Expiración.-
-            if len(row) >= 13 and row[6] == 'Pendiente' and (row[7] or '').upper() == 'TRUE':
+            if len(row) >= 13 and row[6] in ['Pendiente', 'Provisional'] and (row[7] or '').upper() == 'TRUE':
 
                 timestamp_str = (row[12] or '').strip()
 
-                # Evitar Filas Corruptas o Incompletas.-
                 if not timestamp_str:
-                    logger.warning(f"⚠️ Fila {i} Sín TimeStamp Válido — Sé Omite...")
                     continue
 
-                logger.debug(
-                    f"(DEBUG) Procesando Fila {i}: Estado={row[6]}, Activo={row[7]}, Timestamp={timestamp_str}")
-
                 try:
-                    # Parsear timestamp de la hoja.-
                     ts = datetime.fromisoformat(timestamp_str)
                     if ts.tzinfo is None:
                         ts = tz.localize(ts)
 
-                    # ✅ CAMBIO: Calculamos el Punto Exacto de Expiración Usando la Variable Global.-
+                    # Calculamos el Punto Exacto de Expiración.-
                     limite_expiracion = ts + timedelta(seconds=RESERVA_SECONDS)
 
-                    # ✅ COMPARACIÓN: Si el límite ya pasó respecto a 'now'
+                    # COMPARACIÓN: Si el límite ya pasó respecto a 'now'.-
                     if now > limite_expiracion:
-                        logger.info(f"⚠️ Marcando Reserva {row[11]} como EXPIRADA (Superó los {RESERVA_SECONDS}s)...")
+                        logger.info(f"⚠️ Marcando Reserva {row[11]} como EXPIRADA...")
 
-                        # -------------------------------------------------------
                         # REVALIDACIÓN ANTES DE ACTUALIZAR (CRÍTICO).-
-                        # -------------------------------------------------------
                         try:
                             data_actualizada = read_sheet()
                             fila_actual = data_actualizada[i - 2]
-
                             if len(fila_actual) >= 8:
-                                estado_actual = fila_actual[6]
-                                activo_actual = (fila_actual[7] or '').upper()
-
-                                if estado_actual != 'Pendiente' or activo_actual != 'TRUE':
-                                    logger.warning(
-                                        f"⚠️ Fila {i} Cambió Durante Ejecución "
-                                        f"(Estado={estado_actual}) — Sé Omite Expiración..."
-                                    )
+                                if fila_actual[6] not in ['Pendiente', 'Provisional'] or (fila_actual[7] or '').upper() != 'TRUE':
                                     continue
-
-                        except Exception as e:
-                            logger.error(f"ERROR Revalidando Fila {i}: {e}")
+                        except:
                             continue
 
-                        # ✅ AJUSTE DE ÍNDICE: Según tu lista, Teléfono es la columna 1 (segunda columna)
+                        # Datos para la Notificación.-
                         telefono_cliente = str(row[1]).strip()
                         id_reserva = row[11]
 
-                        # Marcar como Expirada.-
-                        row[6] = 'Expirada'  # Cambiar Estado
-                        row[7] = 'FALSE'     # Desactivar
+                        # Marcar como Expirada en la Hoja.-
+                        row[6] = 'Expirada'
+                        row[7] = 'FALSE'
 
-                        # Asegurarse de que la Fila tenga Todas las Columnas.-
                         while len(row) < 13:
                             row.append('')
 
                         update_row(i, row)
                         logger.info(f"✅ Reserva {id_reserva} Expirada Automáticamente (Fila {i})")
 
-                        # ✅ NOTIFICACIÓN ACTIVA AL CLIENTE ( MEMORY Ingeniería en Sistemas ).-
+                        # ✅ NOTIFICACIÓN ACTIVA AL CLIENTE.-
                         try:
-                            # 1. Resetear el estado de la conversación para que el bot no quede trabado.-
-                            if telefono_cliente in conversations:
-                                conversations[telefono_cliente] = {'step': 0}
+                            # 1. Resetear el estado de la conversación en el diccionario de app.py.-
+                            conversations[telefono_cliente] = {'step': 0}
 
-                            # 2. Enviar mensaje de aviso de tiempo agotado.-
+                            # 2. Enviar mensaje de aviso proactivo.-
                             mensaje_aviso = (
-                                "⚠️ ⏰ *TIEMPO AGOTADO*: Tú Reserva Provisional ha Expirado por superar el límite de *01 Minuto*.\n\n"
+                                "⚠️ ⏰ *TIEMPO AGOTADO*: Tú Reserva Provisional há Expirado por Superar el Límite de *01 Minuto*.\n\n"
                                 "El Turno Vuelve a Estar Disponible. Sí Todavía Lo Querés, Escribí *'Turno'* Nuevamente para Empezar, Gracias.-"
                             )
                             send_message(telefono_cliente, mensaje_aviso)
                             logger.info(f"📲 Notificación de Expiración Enviada a: {telefono_cliente}")
 
                         except Exception as e_msg:
-                            logger.error(f"ERROR: Enviándo Notificación dé Expiración al Teléfono: {e_msg}")
+                            logger.error(f"ERROR: Enviándo Notificación dé Expiración: {e_msg}")
 
-                    else:
-                        segundos_transcurridos = (now - ts).total_seconds()
-                        logger.debug(f"( DEBUG ) Reserva {row[11]} aún Válida - Quedan {RESERVA_SECONDS - segundos_transcurridos:.0f}s")
-
-                except ValueError as ve:
-                    logger.error(f"ERROR: Parseando TimeStamp en Fila {i}: {timestamp_str} - {ve}")
+                except ValueError:
                     continue
 
         except Exception as e:
