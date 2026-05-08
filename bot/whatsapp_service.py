@@ -43,7 +43,7 @@ if not PHONE_NUMBER_ID:
 WHATSAPP_API_URL = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
 
 
-#Envía un Mensaje de Texto a un Número de WhatsApp.-
+# Envía un Mensaje de Texto a un Número de WhatsApp.-
 def send_message(to_phone, message):
     """
     Envía un Mensaje de Texto a un Número de WhatsApp
@@ -78,21 +78,25 @@ def send_message(to_phone, message):
 
     try:
         logger.info(f"Enviándo Mensaje a: {to_phone}")
-        print(f"\n=== DEBUG INFO ===")
-        print(f"Token: {WHATSAPP_TOKEN[:20]}...")
-        print(f"Phone ID: {PHONE_NUMBER_ID}")
-        print(f"URL: {WHATSAPP_API_URL}")
-        print(f"To: {to_phone}")
-        print(f"==================\n")
+
+        # Solo Mostramos Info Técnica Sí Nó Estámos én Producción ( MEMORY Ingeniería en Sistemas ).-
+        if SYSTEM_MODE != "production":
+            print(f"\n=== DEBUG INFO ===")
+            print(f"Token: {WHATSAPP_TOKEN[:20]}...")
+            print(f"Phone ID: {PHONE_NUMBER_ID}")
+            print(f"URL: {WHATSAPP_API_URL}")
+            print(f"To: {to_phone}")
+            print(f"==================\n")
 
         response = requests.post(WHATSAPP_API_URL, headers=headers, json=payload)
         response.raise_for_status()
         logger.info(f"Mensaje Enviádo Exitosamente a: {to_phone}")
         return True
     except requests.exceptions.RequestException as e:
-        logger.error(f"ERROR al Enviar Mensaje a: {to_phone}: {e}")
+        # El ERROR principal SIEMPRE se informa ( MEMORY Ingeniería en Sistemas ).-
+        logger.error(f"ERROR ál Enviar Mensaje á: {to_phone}: {e}")
 
-        # AGREGAR: Manejo específico del ERROR: 131030
+        # AGREGAR: Manejo específico del ERROR: 131030 ( Siempre visible porque es Crítico ).-
         if hasattr(e, 'response') and e.response is not None:
             try:
                 error_data = e.response.json()
@@ -100,25 +104,28 @@ def send_message(to_phone, message):
                 error_msg = error_data.get('error', {}).get('message', '')
 
                 if error_code == 131030:
-                    print(f"\n⚠️  ATENCIÓN: El Número {to_phone} NO está en la Lista de Permitidos...")
-                    print(f"    👉 Solución: Agregar el Número en Meta for Developers...")
+                    print(f"\n⚠️  ATENCIÓN: El Número {to_phone} Nó está én lá Lista dé Permitidos...")
+                    print(f"    👉 Solución: Agregar él Número én Meta for Developers...")
                     print(f"    📱 URL: https://developers.facebook.com/apps\n")
             except:
                 pass
 
-        print(f"\n=== ERROR DETALLADO ===")
-        print(f"Tipo de ERROR: {type(e).__name__}")
-        print(f"Mensaje: {str(e)}")
-        if hasattr(e, 'response') and e.response is not None:
-            print(f"Status: {e.response.status_code}")
-            print(f"Body: {e.response.text}")
-        else:
-            print(f"Response: None ( ERROR: de Conexión o Solicitud Malformada...)")
-        print(f"======================\n")
+        # Solo mostramos el detalle técnico del ERROR si NO estamos en Producción.-
+        if SYSTEM_MODE != "production":
+            print(f"\n=== ERROR DETALLADO ===")
+            print(f"Tipo de ERROR: {type(e).__name__}")
+            print(f"Mensaje: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Status: {e.response.status_code}")
+                print(f"Body: {e.response.text}")
+            else:
+                print(f"Response: None ( ERROR: dé Conexión ó Solicitud Malformada...)")
+            print(f"======================\n")
+
         return False
 
 
-#Envía un Mensaje con Lista Interactiva (Para Horarios Disponibles).-
+# Envía ún Mensaje cón Lista Interactiva ( Para Horarios Disponibles ).-
 def send_list_message(to_phone, body_text, button_text, sections):
     """
     Envía un Mensaje con Lista Interactiva (Para Horarios Disponibles)
@@ -160,42 +167,49 @@ def send_list_message(to_phone, body_text, button_text, sections):
     }
 
     try:
-        logger.info(f"Enviándo Lista a: {to_phone}")
-        print(f"\n=== DEBUG INFO ( LIST ) ===")
-        print(f"URL: {WHATSAPP_API_URL}")
-        print(f"Payload: {payload}")
-        print(f"========================\n")
+        logger.info(f"Enviándo Lista á: {to_phone}")
+
+        # Solo Mostramos Info Técnica Sí Nó Estámos én Producción ( MEMORY Ingeniería en Sistemas ).-
+        if SYSTEM_MODE != "production":
+            print(f"\n=== DEBUG INFO ( LIST ) ===")
+            print(f"URL: {WHATSAPP_API_URL}")
+            print(f"Payload: {payload}")
+            print(f"========================\n")
 
         response = requests.post(WHATSAPP_API_URL, headers=headers, json=payload)
         response.raise_for_status()
-        logger.info(f"Lista Enviada Exitosamente a: {to_phone}")
+        logger.info(f"Lista Enviáda Exitosamente á: {to_phone}")
         return True
 
     except requests.exceptions.RequestException as e:
-        logger.error(f"ERROR al Enviar Lista a {to_phone}: {e}")
+        # El ERROR principal SIEMPRE se informa ( MEMORY Ingeniería en Sistemas ).-
+        logger.error(f"ERROR ál Enviar Lista á {to_phone}: {e}")
 
-        # Manejo específico del error 131030
+        # Manejo específico del ERROR: 131030 ( Siempre visible porque es Crítico ).-
         if hasattr(e, 'response') and e.response is not None:
             try:
                 error_data = e.response.json()
                 error_code = error_data.get('error', {}).get('code')
 
                 if error_code == 131030:
-                    print(f"\n⚠️  ATENCIÓN: El Número {to_phone} NO está en la Lista de Permitidos...")
-                    print(f"    👉 Solución: Agregar el Número en Meta for Developers...")
+                    print(f"\n⚠️  ATENCIÓN: El Número {to_phone} Nó Está én lá Lista dé Permitidos...")
+                    print(f"    👉 Solución: Agregar él Número én Meta for Developers...")
                     print(f"    📱 URL: https://developers.facebook.com/apps\n")
             except:
                 pass
 
-        print(f"\n=== ERROR DETALLADO ( LIST ) ===")
-        print(f"Tipo de ERROR: {type(e).__name__}")
-        print(f"Mensaje: {str(e)}")
-        if hasattr(e, 'response') and e.response is not None:
-            print(f"Status: {e.response.status_code}")
-            print(f"Body: {e.response.text}")
-        else:
-            print(f"Response: None ( ERROR: de Conexión o Solicitud Malformada...)")
-        print(f"==============================\n")
+        # Solo mostramos el detalle técnico del ERROR si NO estamos en Producción.-
+        if SYSTEM_MODE != "production":
+            print(f"\n=== ERROR DETALLADO ( LIST ) ===")
+            print(f"Tipo de ERROR: {type(e).__name__}")
+            print(f"Mensaje: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Status: {e.response.status_code}")
+                print(f"Body: {e.response.text}")
+            else:
+                print(f"Response: None ( ERROR: dé Conexión ó Solicitud Malformada...)")
+            print(f"==============================\n")
+
         return False
 
 
