@@ -622,33 +622,40 @@ def health_check():
 
 
 if __name__ == '__main__':
-    # Obtención del puerto desde el entorno ( RailWay asigna uno automáticamente ).-
+    # Obtención Del Puerto Desde él Entorno ( RailWay Asigna Uno Automáticamente ).-
     port = int(os.getenv('PORT', 5000))
 
     # ---------------------------------------------------------------------------------
     # INICIO DEL SCHEDULER ( MEMORY Ingeniería en Sistemas )
     # ---------------------------------------------------------------------------------
-    # El Scheduler es VITAL: és él Encargado de Liberar Los Turnos Sí él Cliente
-    # Nó Escribe "CONFIRMAR" en 60 Segundos.-
+    # El Scheduler es VITAL: és él Encargado de Liberar Los Turnos Si el Cliente
+    # No Escribe "CONFIRMAR" en 60 Segundos.-
     try:
-        # Sé Inicia él Scheduler para Limpiar Reservas Expiradas Cada 30 Segundos.-
+        # Se Inicia el Scheduler Para Limpiar Reservas Expiradas Cada 30 Segundos.-
         iniciar_scheduler(interval_seconds=30)
         logger.info("⏰ Scheduler Sincronizado Correctamente.-")
     except Exception as e:
         logger.error(f"❌ ERROR al Iniciar Scheduler: {e}")
 
     # ---------------------------------------------------------------------------------
-    # EJECUCIÓN DE FLASK
+    # EJECUCIÓN DE FLASK ( MEMORY Ingeniería en Sistemas )
     # ---------------------------------------------------------------------------------
-    # Obtenemos él Modo de Ejecución Desde Las Variables dé Entorno.-
+    # Obtenemos él Modo Dé Ejecución Desde Las Variables de Entorno.-
     SYSTEM_MODE = os.getenv("SYSTEM_MODE", "disabled").lower()
 
+    # IMPORTANTE: Para RailWay y Meta en Modo Desarrollo Usamos él Bloque "else".-
+    # Cuando Meta Valide la App y Pase a Producción, Cambiar Lá Variable Dé Entorno
+    # SYSTEM_MODE a "production".-
+
     if SYSTEM_MODE == "production":
-        # En Producción Desactivamos él 'use_reloader' Para Evitar Qué él
-        # Scheduler Sé Ejecute Dos Veces Por ERROR.-
+        # Bloque para Despliegue Final Absoluto ( App de Meta Activa ).-
+        # En Producción Desactivamos el 'use_reloader' y 'debug' Para Evitar Qué él
+        # Scheduler Sé Ejecute Dos Veces Por ERROR y Sé Pierdan los Imports.-
         app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
     else:
-        # En Modo Local / Debug Permitimos él Auto-Recargado Para Desarrollo.-
+        # ✅ CONFIGURACIÓN ACTUAL ( Modo Demo / Debug ):
+        # Mantenemos debug=True para compatibilidad con el modo Desarrollo de Meta,
+        # pero forzamos use_reloader=False para evitar el error de "No module named".-
         app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
 
 
