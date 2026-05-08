@@ -49,6 +49,20 @@ from datetime import datetime, timedelta
 # ZONAS HORARIAS CENTRALIZADAS ( MEMORY Ingeniería en Sistemas ):
 from sheets.utils import logger, obtener_ahora, tz
 
+# ---------------------------------------------------------------------------------
+# IMPORTS DE SERVICIOS ( MEMORY Ingeniería en Sistemas )
+# ---------------------------------------------------------------------------------
+try:
+    # Intento 1: Formato Para Ejecución Desde Lá Raíz ( RailWay / Producción ).-
+    from sheets.sheet_service import read_sheet, update_row
+except ImportError:
+    # Intento 2: Formato Para Ejecución Local ó Testeo Directo en Pycharm y NGrok.-
+    try:
+        from sheet_service import read_sheet, update_row, tz
+    except ImportError as e:
+        logger.error(f"❌ ERROR de Referencia en Imports Locales: {e}")
+# ---------------------------------------------------------------------------------
+
 # Diccionarios en Castellano.-
 DIAS = {
     'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
