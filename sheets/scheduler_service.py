@@ -98,13 +98,14 @@ from sheets.sheet_service import read_sheet, update_row, append_row, tz, \
 import logging
 logging.getLogger().handlers.clear()
 logger = logging.getLogger(__name__)
-# ✅ SILENCIAR LOGGERS DE APSCHEDULER ( Sólo Errores - MEMORY Ingeniería en Sistemas ).-
+# ✅ SILENCIAR LOGGERS DE APSCHEDULER ( Sólo ERRORES - MEMORY Ingeniería en Sistemas ).-
 logging.getLogger('apscheduler.executors.default').setLevel(logging.WARNING)
 logging.getLogger('apscheduler.scheduler').setLevel(logging.WARNING)
 logging.getLogger('apscheduler.executors').setLevel(logging.WARNING)
+logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.WARNING)
 
 # Tiempo por Defecto para Expiración de Reserva ( en Segundos ).-
-RESERVA_SECONDS = 60  # ← Cambiar de 33 a 60 Segundos = 01 Minutos.-
+RESERVA_SECONDS = 60  # ← Cambiar de 33 a 60 Segundos = 01 Minuto.-
 
 # Scheduler Singleton para Evitar Múltiples Instancias en el Mismo Proceso.-
 _SCHEDULER = None
