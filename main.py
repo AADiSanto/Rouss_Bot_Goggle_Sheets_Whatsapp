@@ -162,6 +162,7 @@ if __name__ == '__main__':
 
     else:
         # En Producción ( RailWay ) Arrancamos Sín Debug Para Estabilidad Absoluta.-
-        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+        en_railway = bool(os.getenv("RAILWAY_ENVIRONMENT"))
+        app.run(host='0.0.0.0', port=port, debug=not en_railway, use_reloader=False)
 
 
