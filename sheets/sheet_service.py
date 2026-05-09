@@ -43,6 +43,9 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 #Nó Imprimir los 'Emojis'.-
 logging.getLogger(__name__).handlers.clear()
+# ✅ THROTTLE DE LOGS DE FERIADOS ( MEMORY Ingeniería en Sistemas ).-
+_ultimo_log_feriados = None
+_LOG_FERIADOS_INTERVALO = 3600  # Segundos — Arranque + Resúmen Cada 01 Hora.-
 
 import os
 import sys
@@ -1962,9 +1965,9 @@ def obtener_sheet_id(nombre_hoja):
 #Colorea Automáticamente las Filas de la Pestaña 'Turnos_Feriados'.-
 def colorear_feriados():
     """
-    Colorea Automáticamente las Filas de la Pestaña 'Turnos_Feriados'.-
-    • Feriados Activos (TRUE o vacío): Fondo Rojo Claro y texto Negrita.
-    • Feriados Desactivados (FALSE / NO / 0): Fondo Blanco y texto normal.
+    Colorea Automáticamente Las Filas dé Lá Pestaña 'Turnos_Feriados'.-
+    • Feriados Activos ( TRUE ó Vacío ): Fondo Rojo Claro y Texto Negrita.-
+    • Feriados Desactivados ( FALSE / NO / 0 ): Fondo Blanco y Texto Normal.-
     """
     # ----------------------------------------------------------------
     # Protección contra Timeouts: Limitar Ejecución.-
@@ -1975,7 +1978,7 @@ def colorear_feriados():
 
     # Solo ejecutar si pasaron al menos 5 minutos (300 segundos)
     if ahora - _ultimo_coloreado < 300:
-        logger.debug(f"Coloreado omitido (última ejecución hace {int(ahora - _ultimo_coloreado)}s)")
+        logger.debug(f"Coloreado Omitido ( última Ejecución Hace {int(ahora - _ultimo_coloreado)}s)")
         return
 
     colorear_feriados._ultimo_coloreado = ahora
@@ -1994,23 +1997,33 @@ def colorear_feriados():
         rows = result.get('values', []) or []
 
     except HttpError as e:
-        logger.error(f"ERROR al Leer Pestaña de Feriados (colorear): {e}")
+        logger.error(f"ERROR al Leer Pestaña dé Feriados ( Colorear ): {e}")
         return
 
     except Exception as e:
-        logger.error(f"ERROR / TIMEOUT al Leer Feriados (colorear): {type(e).__name__}: {e}")
+        logger.error(f"ERROR / TIMEOUT ál Leer Feriados ( Colorear ): {type(e).__name__}: {e}")
         _invalidar_servicio_hilo()
         return
 
     sheet_id = obtener_sheet_id(FERIADOS_SHEET)
     if sheet_id is None:
-        logger.error(f"ERROR: sheet_id no encontrado para '{FERIADOS_SHEET}'")
+        logger.error(f"ERROR: sheet_id Nó Encontrado Para '{FERIADOS_SHEET}'")
         return
 
     requests = []
+    # ✅ THROTTLE: Sólo Loguear Días én Arranque y Cada 3600 Segundos / 01 Hora ( MEMORY Ingeniería en Sistemas ).-
+    global _ultimo_log_feriados
+    from datetime import timezone as _tz_std
+    _ahora_chk = datetime.now(_tz_std.utc)
+    _puede_loguear = (
+            _ultimo_log_feriados is None or
+            (_ahora_chk - _ultimo_log_feriados).total_seconds() >= _LOG_FERIADOS_INTERVALO
+    )
+    if _puede_loguear:
+        _ultimo_log_feriados = _ahora_chk
 
     for i, row in enumerate(rows):
-        # Obtener Valor de Columna 'Activo' (columna D → índice 3)
+        # Obtener Valor de Columna 'Activo' ( Columna D → índice 3 )
         valor_activo = ""
         if len(row) >= 4:
             valor_activo = str(row[3]).strip().upper()
@@ -2019,22 +2032,24 @@ def colorear_feriados():
         else:
             continue
 
-        # Determinar Estado del Día Nó Laborable o Feriado
+        # Determinar Estado del Día Nó Laborable o Feriado.-
         activo = valor_activo not in ['FALSE', 'NO', '0']
 
         # Definir Formato de Color y Texto
         if activo:
-            color = {"red": 1, "green": 0.8, "blue": 0.8}  # Rojo Claro
+            color = {"red": 1, "green": 0.8, "blue": 0.8}  # Rojo Claro.-
             text_format = {"bold": True}
         else:
-            color = {"red": 1, "green": 1, "blue": 1}  # Blanco
+            color = {"red": 1, "green": 1, "blue": 1}  # Blanco.-
             text_format = {"bold": False}
 
-        if activo:
-            logger.info(f"(INFO) Día {row[0] if row else '?'} ACTIVADO — Marcado como Día Nó Laborable o Feriado...")
-        else:
-            logger.info(
-                f"(INFO) Día {row[0] if row else '?'} DESACTIVADO — Se Quitó Formato de Día Nó Laborable o Feriado...")
+        if _puede_loguear:
+            if activo:
+                logger.info(
+                    f"(INFO) Día {row[0] if row else '?'} ACTIVADO — Marcado Como Día Nó Laborable ó Feriado...")
+            else:
+                logger.info(
+                    f"(INFO) Día {row[0] if row else '?'} DESACTIVADO — Sé Quitó Formato dé Día Nó Laborable ó Feriado...")
 
         # Aplicar Formato a Columnas A, B, C y D (índices 0—3)
         requests.append({
@@ -2067,7 +2082,7 @@ def colorear_feriados():
                 body=body
             ).execute()
 
-            logger.info(f"(DEBUG) Coloreado de {len(requests)} Filas en '{FERIADOS_SHEET}' Completado...")
+            logger.info(f"(DEBUG) Coloreado dé {len(requests)} Filas en '{FERIADOS_SHEET}' Completado...")
 
         except HttpError as e:
             logger.error(f"ERROR al Colorear Feriados: {e}")
