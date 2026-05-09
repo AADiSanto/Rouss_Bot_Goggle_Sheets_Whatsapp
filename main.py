@@ -120,24 +120,6 @@ try:
 except Exception as e:
     print(f"⚠️  ERROR: al Configurar Hoja del Año: {e}")
 
-# -----------------------------------------------------------------------------------------
-# NOTA: Nó Ejecutamos colorear_feriados() aquí de forma síncrona para Evitar Timeouts
-# en RailWay. El Job yá está Programado en el Scheduler para ejecutarse en Background.-
-# -----------------------------------------------------------------------------------------
-
-# Iniciar Scheduler ( Verificar Cada 30 Segundos... ).-
-print("⏰ Iniciando Scheduler de Reservas...")
-try:
-    scheduler = iniciar_scheduler(interval_seconds=30)
-
-    # ✅ Verificación de Seguridad para evitar el AttributeError y confirmar Jobs
-    if scheduler:
-        print(f"⏰ Scheduler Iniciado - Jobs Activos: {[j.id for j in scheduler.get_jobs()]}")
-    else:
-        print("⚠️  ADVERTENCIA: El Scheduler Nó sé Pudo Iniciar Correctamente...")
-except Exception as e:
-    print(f"⚠️  ERROR Crítico al Arrancar el Scheduler: {e}")
-    scheduler = None
 
 # ---------------------------------------------------------------------------------
 # INICIO DEL SISTEMA ( MEMORY Ingeniería en Sistemas )
