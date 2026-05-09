@@ -949,12 +949,12 @@ def set_active_spreadsheet(year):
 
     if year in SPREADSHEET_IDS_BY_YEAR:
         SPREADSHEET_ID = SPREADSHEET_IDS_BY_YEAR[year]
-        print(f"✅ Usando Hoja del Mapping Para {year}: {SPREADSHEET_ID}")
+        logger.debug(f"✅ Usando Hoja del Mapping Para {year}: {SPREADSHEET_ID}")
         return SPREADSHEET_ID
 
     # 👇 USAR VALIDACIÓN CORRECTA
     if puede_crear_hoja(year):
-        print(f"📂 Creando o Buscando Hoja Para {year}...")
+        logger.info(f"📂 Creando o Buscando Hoja Para {year}...")
 
         new_id = get_or_create_spreadsheet_for_year(year)
 
