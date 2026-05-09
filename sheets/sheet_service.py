@@ -1061,7 +1061,7 @@ else:
         DATA_AVAILABLE = False
     else:
         # Opcional: Confirmar en Log que la Hoja fué Encontrada.-
-        print(f"(DEBUG) Hoja Encontrada: '{SHEET_NAME}' en Spreadsheet {SPREADSHEET_ID}")
+        logger.info(f"(DEBUG) Hoja Encontrada: '{SHEET_NAME}' en Spreadsheet {SPREADSHEET_ID}")
         DATA_AVAILABLE = True
 
 
@@ -1092,9 +1092,9 @@ def append_row(values):
             ).execute()
 
     except HttpError as e:
-        print("ERROR: al append_row. Spreadsheet ID:", SPREADSHEET_ID)
-        print("Rango Pedido:", full_range)
-        print("HttpError:", e)
+        logger.error(f"ERROR: al append_row. Spreadsheet ID: {SPREADSHEET_ID}")
+        logger.error(f"Rango Pedido: {full_range}")
+        logger.error(f"HttpError: {e}")
         raise
 
 
