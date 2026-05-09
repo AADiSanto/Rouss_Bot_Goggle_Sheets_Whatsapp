@@ -158,11 +158,13 @@ if __name__ == '__main__':
         print(f"📋 Webhook URL: http://localhost:{port}/webhook")
         print(f"❤️  Health Check: http://localhost:{port}/health")
         print("🧪 Ejecutando en MODO DESARROLLO ( Flask Debug )...")
-        app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
+        # ✅ En Railway ( demo ) debug=False para Evitar Doble Carga de Módulos.-
+        # En PyCharm Local ( sin RAILWAY_ENVIRONMENT ) debug=True para Desarrollo.-
+        en_railway = bool(os.getenv("RAILWAY_ENVIRONMENT"))
+        app.run(host='0.0.0.0', port=port, debug=not en_railway, use_reloader=False)
 
     else:
         # En Producción ( RailWay ) Arrancamos Sín Debug Para Estabilidad Absoluta.-
-        en_railway = bool(os.getenv("RAILWAY_ENVIRONMENT"))
-        app.run(host='0.0.0.0', port=port, debug=not en_railway, use_reloader=False)
+        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
 
