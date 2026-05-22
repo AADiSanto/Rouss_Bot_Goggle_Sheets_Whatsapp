@@ -113,7 +113,7 @@ _JOB_ID = 'liberar_reservas_expiradas'
 
 
 # Crea una Reserva Temporal del Turno, con Expiración de RESERVA_SECONDS Segundos.-
-def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora):
+def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora, costo=''):
     """
     Crea una Reserva Temporal del Turno, con Expiración de RESERVA_SECONDS Segundos.-
 
@@ -121,9 +121,9 @@ def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora)
         str: ReservationID único
     """
 
-    # --------------------------------------------------
-    # Extraer Año de la Fecha y Configurar Hoja Activa.-
-    # --------------------------------------------------
+    # -----------------------------------------------------
+    # Extraér Año dé lá Fecha y Configurar Lá Hoja Activa.-
+    # -----------------------------------------------------
     try:
         # Normalizar Fecha Sí Viene en Formato Largo Español.-
         if ',' in fecha:
@@ -215,7 +215,7 @@ def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora)
         hora,              # F (5): Hora
         'Pendiente',       # G (6): Estado
         'TRUE',            # H (7): Activo
-        '',                # I (8): Valor_del_Servicio
+        costo,             # I (8): Valor_del_Servicio
         '',                # J (9): SubTOTALES
         fecha_registro,    # K (10): Fecha Registro
         reservation_id,    # L (11): ReservationID
