@@ -2178,39 +2178,44 @@ def obtener_staff_con_ids():
 def obtener_servicios_negocio():
     """
     Lee los Servicios Disponibles Desde la Hoja Turnos_Servicios_Negocio.-
-    Devuelve una lista de diccionarios:
-        [{'servicio': 'Color', 'icono': '🎨'}, ...]
-    Solo incluye servicios donde 'Activo' == TRUE.-
+    Devuelve una Lista de Diccionarios:
+        [{'servicio': 'Corte', 'icono': '✂️', 'id': '1', 'costo': '18000,00'}, ...]
+    Solo Incluye Servicios donde 'Activo' == TRUE.-
+    Lee Columnas: A (Servicio), B (Activo), C (Icono), D (IDServicios), E (Costo).-
     """
 
     try:
-        # Leer Columnas A (Servicio), B (Activo), C (Icono)
+        # Leer Columnas A (Servicio), B (Activo), C (Icono), D (IDServicios), E (Costo).-
         service_data = _build_service().spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
-            range=_safe_range('Turnos_Servicios_Negocio', 'A2:C100')
+            range=_safe_range('Turnos_Servicios_Negocio', 'A2:E100')
         ).execute().get('values', [])
 
         servicios = []
 
         for fila in service_data:
-            if len(fila) < 3:
+            if len(fila) < 2:
                 continue
 
             nombre = fila[0].strip()
             activo = fila[1].strip().upper()
-            icono = fila[2].strip()
+            icono  = fila[2].strip() if len(fila) > 2 else '✂️'
+            id_srv = str(fila[3]).strip() if len(fila) > 3 else ''
+            costo  = str(fila[4]).strip() if len(fila) > 4 else ''
 
             # Filtrar Vacíos y Sólo Incluir Activos.-
             if nombre != "" and activo == "TRUE":
                 servicios.append({
                     'servicio': nombre,
-                    'icono': icono if icono else '✂️'
+                    'icono'   : icono  if icono  else '✂️',
+                    'id'      : id_srv if id_srv else '',
+                    'costo'   : costo  if costo  else ''
                 })
 
         return servicios
 
     except Exception as e:
-        logger.error(f"ERROR: al Leer Servicios del Negocio: {e}")
+        logger.error(f"ERROR: al Leer Los Servicios del Negocio: {e}")
         return []
 
 
