@@ -24,6 +24,8 @@ import logging
 
 import os
 
+from sheets.sheet_service import obtener_staff_negocio, obtener_staff_con_ids
+
 # --- Cargar Variables de Entorno ---
 NOMBRE_EMPRESA = os.getenv('Nombre_de_la_Empresa', 'Negocio') # 'Nombre del Negocio...'
 
@@ -94,6 +96,25 @@ def get_staff_names():
         logger.info(f"🔄 Caché de Staff Actualizado: {_STAFF_CACHE}")
 
     return _STAFF_CACHE
+
+# Cache para Staff con IDs ( Evita Leer Google Sheets en Cada Mensaje ).-
+_STAFF_IDS_CACHE = None
+_STAFF_IDS_CACHE_TIME = 0
+
+
+def get_staff_with_ids():
+    """Obtiene Staff con IDStaff con caché de 05 Minutos.-"""
+    global _STAFF_IDS_CACHE, _STAFF_IDS_CACHE_TIME
+    import time
+
+    now = time.time()
+    # Refrescar Caché Cada 05 Minutos ( 300 Segundos ).-
+    if _STAFF_IDS_CACHE is None or (now - _STAFF_IDS_CACHE_TIME) > 300:
+        _STAFF_IDS_CACHE = obtener_staff_con_ids()
+        _STAFF_IDS_CACHE_TIME = now
+        logger.info(f"🔄 Caché de Staff con IDs Actualizado: {_STAFF_IDS_CACHE}")
+
+    return _STAFF_IDS_CACHE
 
 
 # ---------------------------------------------------------------------------------
@@ -247,7 +268,18 @@ def process_text_message(sender, text):
         conversations[sender] = {'step': 0}
 
     state = conversations[sender]
+
     step = state['step']
+
+    # -----------------------------------------------------------------------
+    # RESET GLOBAL: El Cliente Puede Empezar de Nuevo en Cualquier Momento.-
+    # -----------------------------------------------------------------------
+    if 'error' in text_lower:
+        conversations[sender] = {'step': 0}
+        send_message(sender,
+                     "🔄 *Proceso Cancelado*. Cuando Quieras Empezar de Nuevo Escribí *'Turno'*...")
+        return
+    # -----------------------------------------------------------------------
 
     # Íconos Por Servicio.-
     service_icons = {
@@ -261,28 +293,34 @@ def process_text_message(sender, text):
 
     # Flujo de Conversación.-
     if step == 0 and any(p in text_lower for p in ['cita', 'reserva', 'turno']):
-        # Inicio - Obtener Staff Dinámicamente.-
-        staff_names = get_staff_names()
+        # Inicio - Obtener Staff con IDs Dinámicamente.-
+        staff_data = get_staff_with_ids()
 
-        # Generar Mensaje con Numeración Dinámica.-
-        staff_list = '\n'.join([f"{i + 1}️⃣ {name}" for i, name in enumerate(staff_names)])
+        # Emojis Numéricos para los IDs del Staff.-
+        num_emojis = {'1': '1️⃣', '2': '2️⃣', '3': '3️⃣', '4': '4️⃣', '5': '5️⃣',
+                      '6': '6️⃣', '7': '7️⃣', '8': '8️⃣', '9': '9️⃣'}
+
+        # Generar Mensaje con IDStaff Dinámico desde Google Sheets.-
+        staff_list = '\n'.join([
+            f"{num_emojis.get(item['id'], item['id'] + '.')} {item['nombre']}"
+            for item in staff_data
+        ])
 
         # ✅ Uso de Variable Dinámica NOMBRE_EMPRESA ( MEMORY Ingeniería en Sistemas ).-
         send_message(sender,
-                     f"¡Hola! 👋 Bienvenido a {NOMBRE_EMPRESA} Coiffeur's - ¿Con Qué Coiffeur Querés Tú Turno?...\n\n{staff_list}\n\nEscribí el Nombre del Coiffeur de Tú Preferencia.-")
+                     f"¡Hola! 👋 Bienvenido a {NOMBRE_EMPRESA} Coiffeur's - ¿Con Qué Coiffeur Querés Tú Turno?...\n\n{staff_list}\n\nEscribí el Número del Coiffeur de Tú Preferencia.\n\n💡 *Tip:* Sí en Algún Momento Te Equivocás, Escribí *'Error'* para Empezar de Nuevo, Gracias.-")
 
         state['step'] = 1
 
     elif step == 1:
-        # Selección de Coiffeur - Validación Dinámica.-
-        staff_names = get_staff_names()
+        # Selección de Coiffeur por IDStaff - Validación Dinámica.-
+        staff_data = get_staff_with_ids()
 
-        # Normalizar Entrada del Usuario.-
+        # Buscar el IDStaff que Coincida con lo que Escribió el Cliente.-
         coiffeur_selected = None
-        for name in staff_names:
-            # Comparación Flexible (sin tildes, mayúsculas/minúsculas).-
-            if name.lower().replace('í', 'i').replace('á', 'a') in text_lower.replace('í', 'i').replace('á', 'a'):
-                coiffeur_selected = name
+        for item in staff_data:
+            if text.strip() == item['id']:
+                coiffeur_selected = item['nombre']
                 break
 
         if coiffeur_selected:
@@ -290,9 +328,10 @@ def process_text_message(sender, text):
             send_message(sender, f"Perfecto, Elegiste a {coiffeur_selected}.\n\n¿Cuál es Tú Nombre?:")
             state['step'] = 1.5
         else:
-            # Mensaje de error dinámico
-            staff_list = ', '.join([f"'{name}'" for name in staff_names])
-            send_message(sender, f"No Entendí Tú Respuesta. Por Favor Escribí Uno de éstos Nombres: {staff_list}")
+            # Mensaje de Error con Lista de IDs Disponibles.-
+            staff_list = '\n'.join([f"  {item['id']} → {item['nombre']}" for item in staff_data])
+            send_message(sender,
+                         f"⚠️ No Entendí Tú Respuesta. Por Favor Escribí el Número del Coiffeur:\n\n{staff_list}")
 
     elif step == 1.5:
         # Captura del Nombre del Cliente.-
