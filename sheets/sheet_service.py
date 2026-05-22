@@ -2125,6 +2125,51 @@ def obtener_staff_negocio():
         return ['Walter', 'María']  # Fallback en caso de error.-
 
 
+def obtener_staff_con_ids():
+    """
+    Lee el Staff con sus IDStaff desde la Pestaña 'Turnos_Staff_Negocio'.-
+    Lee las Columnas A ( Nombre ) y B ( IDStaff ).-
+
+    Returns:
+        list: Lista de Dicts ( ej.: [{'nombre': 'María', 'id': '1'}, ...] )
+    """
+    STAFF_SHEET = 'Turnos_Staff_Negocio'
+
+    try:
+        full_range = _safe_range(STAFF_SHEET, 'A2:B100')
+        result = _build_service().spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=full_range
+        ).execute()
+        rows = result.get('values', []) or []
+
+        # Filtrar Filas Vacías y Construir Lista de Dicts.-
+        staff = [
+            {'nombre': row[0].strip(), 'id': str(row[1]).strip()}
+            for row in rows
+            if len(row) >= 2 and row[0].strip() and row[1].strip()
+        ]
+
+        if not staff:
+            logger.warning("⚠️ Nó Sé Encontró Staff con IDStaff en 'Turnos_Staff_Negocio', Usando Valores por Defecto...")
+            return [
+                {'nombre': 'María',    'id': '1'},
+                {'nombre': 'Patricia', 'id': '2'},
+                {'nombre': 'Walter',   'id': '3'}
+            ]  # Fallback.-
+
+        logger.info(f"✅ Staff con IDs Cargado desde Google Sheets: {staff}")
+        return staff
+
+    except HttpError as e:
+        logger.error(f"ERROR: al Leer Staff con IDs en 'Turnos_Staff_Negocio': {e}")
+        return [
+            {'nombre': 'María',    'id': '1'},
+            {'nombre': 'Patricia', 'id': '2'},
+            {'nombre': 'Walter',   'id': '3'}
+        ]  # Fallback en Caso de Error.-
+
+
 # ------------------------------------------------------------------------------------------
 # Lectura Dinámica de Servicios Desde la Hoja Turnos_Servicios_Negocio desde Google Sheets.-
 # Ahora Filtra por Columna "Activo" (B) y Devuelve Sólo los Servicios con Activo = TRUE.-
