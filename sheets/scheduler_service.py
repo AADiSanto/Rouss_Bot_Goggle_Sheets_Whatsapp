@@ -49,7 +49,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
 
 # ZONAS HORARIAS CENTRALIZADAS ( MEMORY Ingeniería en Sistemas ):
-from sheets.utils import logger, obtener_ahora
+from sheets.utils import logger, obtener_ahora, log_throttled
 
 # ✅ FORZAR RUTAS ( MEMORY Ingeniería en Sistemas ):
 # Esto Asegura Qué él Scheduler Encuentre Tanto 'sheets' como 'bot'.-
@@ -436,12 +436,11 @@ def liberar_reservas_expiradas():
     # ---------------------------------------------------------------------------------
     # CONTROL DE LOGS ( RAILWAY ): 120 Ciclos de 30 Segundos = 01 Hora.-
     # ---------------------------------------------------------------------------------
-    contador = getattr(liberar_reservas_expiradas, '_contador', 0)
+    # Busca y Marca como Expiradas las Reservas que Superaron el Tiempo Límite.
+    # Ejecutado Periódicamente Cada 120 Minutos por él scheduler.-
 
-    if contador % 120 == 0:
-        logger.info(">>> 🔄 Estado: El Proceso 'liberar_reservas_expiradas()' Sigue Activo ( Resúmen Cada Hora )...")
+    log_throttled('info', ">>> 🔄 Estado: El Proceso 'liberar_reservas_expiradas()' Sigue Activo ( Resúmen Cada Hora )...", logger)
 
-    liberar_reservas_expiradas._contador = contador + 1
 
     # ---------------------------------------------------------------------------------
     # ✅ SOLUCIÓN A REFERENCIAS ( MEMORY Ingeniería en Sistemas ):
@@ -609,11 +608,7 @@ def iniciar_scheduler(interval_seconds: int = 6):
 
                     # Ejecutamos Lá Función Dé Coloreo.-
                     colorear_feriados()
-
-                    if contador % 4 == 0:
-                        print(">>> 🎨 Estado: El Proceso 'colorear_feriados()' Sigue Activo ( Resúmen Cada Hora )...")
-
-                    colorear_feriados_safe._contador = contador + 1
+                    log_throttled('info',">>> 🎨 Estado: El Proceso 'colorear_feriados()' Sigue Activo ( Resúmen Cada Hora )...",logger)
 
                 except Exception as e:
                     # Los errores SIEMPRE se informan de inmediato.-
