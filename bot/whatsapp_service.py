@@ -23,6 +23,7 @@ import requests
 import os
 import logging
 from dotenv import load_dotenv
+from sheets.utils import log_throttled
 
 load_dotenv()
 
@@ -77,7 +78,7 @@ def send_message(to_phone, message):
     }
 
     try:
-        logger.info(f"Enviándo Mensaje a: {to_phone}")
+        log_throttled('info', f"Enviándo Mensaje a: {to_phone}", logger)
 
         # Solo Mostramos Info Técnica Sí Nó Estámos én Producción ( MEMORY Ingeniería en Sistemas ).-
         if SYSTEM_MODE != "production" and not os.getenv("RAILWAY_ENVIRONMENT"):
@@ -90,7 +91,9 @@ def send_message(to_phone, message):
 
         response = requests.post(WHATSAPP_API_URL, headers=headers, json=payload)
         response.raise_for_status()
-        logger.info(f"Mensaje Enviádo Exitosamente a: {to_phone}")
+
+        log_throttled('info', f"Mensaje Enviádo Exitosamente a: {to_phone}", logger)
+
         return True
     except requests.exceptions.RequestException as e:
         # El ERROR principal SIEMPRE se informa ( MEMORY Ingeniería en Sistemas ).-
@@ -167,7 +170,7 @@ def send_list_message(to_phone, body_text, button_text, sections):
     }
 
     try:
-        logger.info(f"Enviándo Lista á: {to_phone}")
+        log_throttled('info', f"Enviándo Lista á: {to_phone}", logger)
 
         # Solo Mostramos Info Técnica Sí Nó Estámos én Producción ( MEMORY Ingeniería en Sistemas ).-
         if SYSTEM_MODE != "production" and not os.getenv("RAILWAY_ENVIRONMENT"):
@@ -178,7 +181,9 @@ def send_list_message(to_phone, body_text, button_text, sections):
 
         response = requests.post(WHATSAPP_API_URL, headers=headers, json=payload)
         response.raise_for_status()
-        logger.info(f"Lista Enviáda Exitosamente á: {to_phone}")
+
+        log_throttled('info', f"Lista Enviáda Exitosamente á: {to_phone}", logger)
+
         return True
 
     except requests.exceptions.RequestException as e:
