@@ -76,3 +76,48 @@ def formatear_fecha_leible(fecha_dt):
     return fecha_dt.strftime("%d/%m/%Y %H:%M")
 
 
+# -------------------------------------------------------------------------
+# CONTROL DE LOGS ( Throttle para Reducir Costos en Railway )
+# -------------------------------------------------------------------------
+
+# Diccionario Global para Registrar la Última vez que Salió cada Mensaje.-
+_ultimo_log: dict = {}
+
+# Leer el Flag desde .env.-
+LOGS_CADA_HORA = os.getenv('LOGS_CADA_HORA', 'false').lower() == 'true'
+
+
+def log_throttled(nivel: str, mensaje: str, logger_ref=None):
+    """
+    Emite un Log Respetando el Flag LOGS_CADA_HORA del .env.-
+        - Si LOGS_CADA_HORA=false : Siempre Muestra el Log.-
+        - Si LOGS_CADA_HORA=true  : Muestra el Log Solo 1 Vez por Hora ( Errores Siempre Salen ).-
+
+    Args:
+        nivel     : 'info' | 'warning' | 'error' | 'debug'
+        mensaje   : Texto del log.-
+        logger_ref: Logger del Módulo que Llama ( Opcional ).-
+    """
+    nivel = nivel.lower()
+    es_error = nivel == 'error'
+
+    # Los Errores SIEMPRE Salen sín Importar el Flag.-
+    if es_error or not LOGS_CADA_HORA:
+        _emitir_log(nivel, mensaje, logger_ref)
+        return
+
+    # Throttle: Sólo Emitir si Pasó más de 01 Hora desde la Última Vez.-
+    ahora = datetime.now(tz)
+    ultima = _ultimo_log.get(mensaje)
+
+    if ultima is None or (ahora - ultima) >= timedelta(hours=1):
+        _ultimo_log[mensaje] = ahora
+        _emitir_log(nivel, mensaje, logger_ref)
+
+
+def _emitir_log(nivel: str, mensaje: str, logger_ref=None):
+    """Función Interna que Despacha el Log al Logger Correcto.-"""
+    ref = logger_ref or logger
+    getattr(ref, nivel, ref.info)(mensaje)
+
+
