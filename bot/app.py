@@ -338,46 +338,54 @@ def process_text_message(sender, text):
         state['nombre'] = text.strip()
         state['telefono'] = sender
 
-        # --- Obtener Servicios desde la Hoja del Negocio ---
+        # --- Obtener Servicios con IDs desde la Hoja del Negocio ---
         try:
-            servicios_disponibles = obtener_servicios_negocio()  # ← Lista de dicts: {'servicio': 'Color', 'icono': '🎨'}
+            servicios_disponibles = obtener_servicios_negocio()
         except Exception as e:
             logger.error(f"ERROR: al Leer Servicios del Negocio: {e}")
-            # Fallback de Seguridad (con iconos básicos)
             servicios_disponibles = [
-                {'servicio': 'Color', 'icono': '🎨'},
-                {'servicio': 'Corte', 'icono': '✂️'},
-                {'servicio': 'Peinado', 'icono': '💇'}
+                {'servicio': 'Corte', 'icono': '✂️', 'id': '1', 'costo': ''},
+                {'servicio': 'Flequillo', 'icono': '💇', 'id': '2', 'costo': ''},
+                {'servicio': 'Recorte Barba', 'icono': '🪒', 'id': '3', 'costo': ''}
             ]
 
-        # Generar Lista de Servicios con Íconos.-
+        # Emojis Numéricos para los IDs de Servicios.-
+        num_emojis = {'1': '1️⃣', '2': '2️⃣', '3': '3️⃣', '4': '4️⃣', '5': '5️⃣',
+                      '6': '6️⃣', '7': '7️⃣', '8': '8️⃣', '9': '9️⃣', '10': '🔟',
+                      '11': '1️⃣1️⃣', '12': '1️⃣2️⃣'}
+
+        # Generar Lista de Servicios con IDServicio e Ícono.-
         lista_servicios = ""
         for item in servicios_disponibles:
-            nombre_servicio = item.get('servicio', '')
-            icono_servicio = item.get('icono', '✂️')
-            lista_servicios += f"{icono_servicio} {nombre_servicio}\n"
+            id_srv = item.get('id', '')
+            icono = item.get('icono', '✂️')
+            nombre = item.get('servicio', '')
+            emoji = num_emojis.get(id_srv, f"{id_srv}.")
+            lista_servicios += f"{emoji} {icono} {nombre}\n"
 
         send_message(
             sender,
-            f"Gracias {state['nombre']}. ¿Qué Servicio Necesitás?...:\n\n{lista_servicios}"
+            f"Gracias {state['nombre']}. ¿Qué Servicio Necesitás?...:\n\n{lista_servicios}\n"
+            f"Escribí el Número del Servicio de Tú Preferencia.\n\n"
+            f"💡 *Tip:* Sí Té Equivocás, Escribí *'Error'* para Empezar de Nuevo.-"
         )
         state['step'] = 2
 
     elif step == 2:
-        # Selección de Servicio (Dinámico desde Google Sheets).-
+        # Selección de Servicio ( Dinámico desde Google Sheets ).-
 
-        # Leer Servicios Disponibles del Negocio (Lista de dicts).-
+        # Leer Servicios Disponibles del Negocio ( Lista de dicts ).-
         servicios_data = obtener_servicios_negocio()
 
         if not servicios_data:
             send_message(sender,
-                         "⚠️ ERROR: No Hay Servicios Definidos en el Negocio...\n"
-                         "Por Favor Comunicáte con el Salón, Gracias...")
+                         "⚠️ ERROR: Nó Háy Servicios Definidos én él Negocio...\n"
+                         "Por Favor Comunicáte con él Salón, Gracias...")
             return
 
         # Normalizar Texto del Usuario para Comparación Flexible.-
-        texto_norm = text_lower.replace('á','a').replace('é','e').replace('í','i') \
-                               .replace('ó','o').replace('ú','u')
+        texto_norm = text_lower.replace('á', 'a').replace('é', 'e').replace('í', 'i') \
+            .replace('ó', 'o').replace('ú', 'u')
 
         servicio_elegido = None
 
@@ -387,19 +395,19 @@ def process_text_message(sender, text):
             if not nombre_srv:
                 continue
 
-            srv_norm = nombre_srv.lower().replace('á','a').replace('é','e').replace('í','i') \
-                                         .replace('ó','o').replace('ú','u')
+            srv_norm = nombre_srv.lower().replace('á', 'a').replace('é', 'e').replace('í', 'i') \
+                .replace('ó', 'o').replace('ú', 'u')
 
             if srv_norm in texto_norm:
-                servicio_elegido = nombre_srv   # ← Guardamos el Nombre Exacto Como Aparece en Sheets.-
+                servicio_elegido = nombre_srv
                 break
 
-        # Sí el Servicio no Coincide con Ninguno del Listado.-
+        # Sí el Servicio nó Coincide con Ninguno del Listado.-
         if servicio_elegido is None:
-            lista_srv = '\n'.join([f"• {item.get('servicio','')}" for item in servicios_data])
+            lista_srv = '\n'.join([f"• {item.get('servicio', '')}" for item in servicios_data])
             send_message(sender,
-                         "⚠️ No Entendí el Servicio Elegido...\n\n"
-                         "Por Favor Elegí Uno de Estos Servicios:\n\n"
+                         "⚠️ Nó Entendí él Servicio Elegido...\n\n"
+                         "Por Favor Elegí Uno dé éstos Servicios:\n\n"
                          f"{lista_srv}")
             return
 
@@ -409,7 +417,7 @@ def process_text_message(sender, text):
         send_message(sender,
                      f"Servicio: {state['servicio']} ✓\n\n"
                      "¿Qué Día Té Gustaría Venir?\n\n"
-                     "Por Favor Escribí La Fecha en Formato: DD-MM-AAAA\n"
+                     "Por Favor Escribí Lá Fecha én Formato: DD-MM-AAAA\n"
                      "Ej.: 15-10-2025")
         state['step'] = 3
 
@@ -536,7 +544,8 @@ def process_text_message(sender, text):
             try:
                 reservation_id = crear_reserva_provisional(
                     nombre, telefono, state['servicio'],
-                    state['coiffeur'], state['fecha_larga'], hora
+                    state['coiffeur'], state['fecha_larga'], hora,
+                    costo=state.get('costo', '')
                 )
 
             except Exception as e:
