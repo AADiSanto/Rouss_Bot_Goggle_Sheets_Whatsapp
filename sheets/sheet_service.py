@@ -2212,6 +2212,11 @@ def obtener_servicios_negocio():
                     'costo'   : costo  if costo  else ''
                 })
 
+        #**************************************************
+        # DEBUG TEMPORAL - Comentar Después de Verificar.-
+        print(f"DEBUG Servicios Leídos: {servicios}")
+        # *************************************************
+
         return servicios
 
     except Exception as e:
