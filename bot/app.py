@@ -25,6 +25,7 @@ import logging
 import os
 
 from sheets.sheet_service import obtener_staff_negocio, obtener_staff_con_ids
+from sheets.utils import log_throttled
 
 # --- Cargar Variables de Entorno ---
 NOMBRE_EMPRESA = os.getenv('Nombre_de_la_Empresa', 'Negocio') # 'Nombre del Negocio...'
@@ -93,7 +94,8 @@ def get_staff_names():
     if _STAFF_CACHE is None or (now - _STAFF_CACHE_TIME) > 300:
         _STAFF_CACHE = obtener_staff_negocio()
         _STAFF_CACHE_TIME = now
-        logger.info(f"🔄 Caché de Staff Actualizado: {_STAFF_CACHE}")
+
+        log_throttled('info', f"🔄 Caché de Staff Actualizado: {_STAFF_CACHE}", logger)
 
     return _STAFF_CACHE
 
@@ -112,7 +114,8 @@ def get_staff_with_ids():
     if _STAFF_IDS_CACHE is None or (now - _STAFF_IDS_CACHE_TIME) > 300:
         _STAFF_IDS_CACHE = obtener_staff_con_ids()
         _STAFF_IDS_CACHE_TIME = now
-        logger.info(f"🔄 Caché de Staff con IDs Actualizado: {_STAFF_IDS_CACHE}")
+
+        log_throttled('info', f"🔄 Caché de Staff con IDs Actualizado: {_STAFF_IDS_CACHE}", logger)
 
     return _STAFF_IDS_CACHE
 
