@@ -374,6 +374,10 @@ def process_text_message(sender, text):
     elif step == 2:
         # Selección de Servicio ( Dinámico desde Google Sheets ).-
 
+        # DEBUG TEMPORAL - Comentar Después de Verificar: ------
+        print(f"DEBUG step2: text='{text}' repr={repr(text)}")
+        #-------------------------------------------------------
+
         # Leer Servicios Disponibles del Negocio ( Lista de dicts ).-
         servicios_data = obtener_servicios_negocio()
 
