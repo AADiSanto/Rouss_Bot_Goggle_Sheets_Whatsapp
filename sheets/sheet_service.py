@@ -43,9 +43,6 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 #Nó Imprimir los 'Emojis'.-
 logging.getLogger(__name__).handlers.clear()
-# ✅ THROTTLE DE LOGS DE FERIADOS ( MEMORY Ingeniería en Sistemas ).-
-_ultimo_log_feriados = None
-_LOG_FERIADOS_INTERVALO = 3600  # Segundos — Arranque + Resúmen Cada 01 Hora.-
 
 import os
 import sys
@@ -56,18 +53,14 @@ from pathlib import Path
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from google.oauth2 import service_account
 
 from datetime import datetime
 
-# ZONAS HORARIAS CENTRALIZADAS ( MEMORY Ingeniería en Sistemas ):
-# Al Estar Ambos Archivos en la Misma Carpeta 'sheets/', sé Importa Directamente.-
-from sheets.utils import obtener_ahora, tz
-
 import json
 
-# Aquí También sé Puede Usar la Misma Lógica sí es el mismo archivo.-
-from sheets.utils import normalizar_hora
+# ZONAS HORARIAS CENTRALIZADAS ( MEMORY Ingeniería en Sistemas ):
+# Al Estar Ambos Archivos en la Misma Carpeta 'sheets/', sé Importa Directamente.-
+from sheets.utils import obtener_ahora, tz, log_throttled, normalizar_hora
 
 # Forzar La Carga de Variables Sí Existe un .env Local,
 # pero Railway Las Inyectará Directamente.-
@@ -80,7 +73,7 @@ SERVICE_ACCOUNT_FILE = HERE / 'credentials.json'
 # ✅ Permisos desde Raíz de Google Drive:
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
-    'https://www.googleapis.com/auth/drive'  # Acceso completo para mover archivos a carpetas compartidas.-
+    'https://www.googleapis.com/auth/drive'  # Acceso Completo Para Mover Archivos a Carpetas Compartidas.-
 ]
 
 # SPREADSHEET_ID se Obtendrá Dinámicamente según el Año del Turno.-
@@ -1179,7 +1172,8 @@ def es_feriado(fecha):
         if valor_activo not in ['FALSE', 'NO', '0']:
             feriados_activos.append(fecha_feriado)
 
-    logger.info(f"(DEBUG) Feriados Activos Detectados: {feriados_activos}")
+    log_throttled('info', f"(DEBUG) Feriados Activos Detectados: {feriados_activos}", logger)
+
     return fecha in feriados_activos
 
 
@@ -2011,16 +2005,6 @@ def colorear_feriados():
         return
 
     requests = []
-    # ✅ THROTTLE: Sólo Loguear Días én Arranque y Cada 3600 Segundos / 01 Hora ( MEMORY Ingeniería en Sistemas ).-
-    global _ultimo_log_feriados
-    from datetime import timezone as _tz_std
-    _ahora_chk = datetime.now(_tz_std.utc)
-    _puede_loguear = (
-            _ultimo_log_feriados is None or
-            (_ahora_chk - _ultimo_log_feriados).total_seconds() >= _LOG_FERIADOS_INTERVALO
-    )
-    if _puede_loguear:
-        _ultimo_log_feriados = _ahora_chk
 
     for i, row in enumerate(rows):
         # Obtener Valor de Columna 'Activo' ( Columna D → índice 3 )
@@ -2043,13 +2027,15 @@ def colorear_feriados():
             color = {"red": 1, "green": 1, "blue": 1}  # Blanco.-
             text_format = {"bold": False}
 
-        if _puede_loguear:
-            if activo:
-                logger.info(
-                    f"(INFO) Día {row[0] if row else '?'} ACTIVADO — Marcado Como Día Nó Laborable ó Feriado...")
-            else:
-                logger.info(
-                    f"(INFO) Día {row[0] if row else '?'} DESACTIVADO — Sé Quitó Formato dé Día Nó Laborable ó Feriado...")
+        # ✅ THROTTLE: Log Respeta LOGS_CADA_HORA del .env ( MEMORY Ingeniería en Sistemas ).-
+        if activo:
+            log_throttled('info',
+                          f"(INFO) Día {row[0] if row else '?'} ACTIVADO — Marcado Como Día Nó Laborable ó Feriado...",
+                          logger)
+        else:
+            log_throttled('info',
+                          f"(INFO) Día {row[0] if row else '?'} DESACTIVADO — Sé Quitó Formato dé Día Nó Laborable ó Feriado...",
+                          logger)
 
         # Aplicar Formato a Columnas A, B, C y D (índices 0—3)
         requests.append({
@@ -2082,13 +2068,14 @@ def colorear_feriados():
                 body=body
             ).execute()
 
-            logger.info(f"(DEBUG) Coloreado dé {len(requests)} Filas en '{FERIADOS_SHEET}' Completado...")
+            log_throttled('info',
+                          f"(DEBUG) Coloreado dé {len(requests)} Filas en '{FERIADOS_SHEET}' Completado...",
+                          logger)
 
         except HttpError as e:
             logger.error(f"ERROR al Colorear Feriados: {e}")
         except Exception as e:               # ← Captura SSL, Timeout y Cualquier Otro Error.-
             logger.error(f"ERROR / TIMEOUT al Colorear Feriados: {type(e).__name__}: {e}")
-
 
 # --------------------------------------------------------------------------------
 # Lectura Dinámica del Staff desde Google Sheets.-
