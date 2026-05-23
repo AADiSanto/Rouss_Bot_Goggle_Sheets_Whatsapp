@@ -372,12 +372,7 @@ def process_text_message(sender, text):
         state['step'] = 2
 
     elif step == 2:
-        # Selección de Servicio ( Dinámico desde Google Sheets ).-
-
-        # DEBUG TEMPORAL - Comentar Después de Verificar: ------
-        print(f"DEBUG step2: text='{text}' repr={repr(text)}")
-        #-------------------------------------------------------
-
+        # Selección de Servicio por IDServicio - Validación Dinámica.-
         # Leer Servicios Disponibles del Negocio ( Lista de dicts ).-
         servicios_data = obtener_servicios_negocio()
 
@@ -387,36 +382,33 @@ def process_text_message(sender, text):
                          "Por Favor Comunicáte con él Salón, Gracias...")
             return
 
-        # Normalizar Texto del Usuario para Comparación Flexible.-
-        texto_norm = text_lower.replace('á', 'a').replace('é', 'e').replace('í', 'i') \
-            .replace('ó', 'o').replace('ú', 'u')
-
+        # Buscar el IDServicio que Coincida con lo que Escribió el Cliente.-
         servicio_elegido = None
+        costo_elegido = ''
 
-        # Buscar Coincidencia contra la Lista de Servicios.-
         for item in servicios_data:
-            nombre_srv = item.get('servicio', '')
-            if not nombre_srv:
-                continue
-
-            srv_norm = nombre_srv.lower().replace('á', 'a').replace('é', 'e').replace('í', 'i') \
-                .replace('ó', 'o').replace('ú', 'u')
-
-            if srv_norm in texto_norm:
-                servicio_elegido = nombre_srv
+            if text.strip() == item.get('id', ''):
+                servicio_elegido = item.get('servicio', '')
+                costo_elegido = item.get('costo', '')
                 break
 
-        # Sí el Servicio nó Coincide con Ninguno del Listado.-
+        # Sí el ID nó Coincide con Ninguno del Listado.-
         if servicio_elegido is None:
-            lista_srv = '\n'.join([f"• {item.get('servicio', '')}" for item in servicios_data])
+            num_emojis = {'1': '1️⃣', '2': '2️⃣', '3': '3️⃣', '4': '4️⃣', '5': '5️⃣',
+                          '6': '6️⃣', '7': '7️⃣', '8': '8️⃣', '9': '9️⃣', '10': '🔟',
+                          '11': '1️⃣1️⃣', '12': '1️⃣2️⃣'}
+            lista_srv = '\n'.join([
+                f"  {num_emojis.get(item.get('id', ''), item.get('id', '') + '.')} "
+                f"{item.get('icono', '✂️')} {item.get('servicio', '')}"
+                for item in servicios_data
+            ])
             send_message(sender,
-                         "⚠️ Nó Entendí él Servicio Elegido...\n\n"
-                         "Por Favor Elegí Uno dé éstos Servicios:\n\n"
-                         f"{lista_srv}")
+                         f"⚠️ Nó Entendí Tú Respuesta. Por Favor Escribí él Número del Servicio:\n\n{lista_srv}")
             return
 
-        # Servicio Válido Seleccionado.-
+        # Servicio Válido Seleccionado - Guardar Nombre y Costo en el Estado.-
         state['servicio'] = servicio_elegido
+        state['costo'] = costo_elegido
 
         send_message(sender,
                      f"Servicio: {state['servicio']} ✓\n\n"
