@@ -101,7 +101,7 @@ def log_throttled(nivel: str, mensaje: str, logger_ref=None):
     nivel = nivel.lower()
     es_error = nivel == 'error'
 
-    # Los Errores SIEMPRE Salen sí# Throttle: Sólo Emitir si Pasó más de 03 Horas desde la Última Vez.-n Importar el Flag.-
+    # Los Errores SIEMPRE Salen Sin Importar el Flag.-
     if es_error or not LOGS_CADA_HORA:
         _emitir_log(nivel, mensaje, logger_ref)
         return
@@ -110,7 +110,8 @@ def log_throttled(nivel: str, mensaje: str, logger_ref=None):
     ahora = datetime.now(tz)
     ultima = _ultimo_log.get(mensaje)
 
-    if ultima is None or (ahora - ultima) >= timedelta(seconds=360):
+     # Cada 3 Horas el Log.-
+    if ultima is None or (ahora - ultima) >= timedelta(hours=3):
         _ultimo_log[mensaje] = ahora
         _emitir_log(nivel, mensaje, logger_ref)
 
