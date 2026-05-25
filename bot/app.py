@@ -137,6 +137,9 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# ✅ Silenciar los Pings y Peticiones HTTP Rutinarias de Flask/Werkzeug, sólo Los ERRORES.-
+logging.getLogger('werkzeug').setLevel(logging.ERROR)
+
 from flask import Flask, request, jsonify
 
 import os
