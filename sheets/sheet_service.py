@@ -2027,15 +2027,16 @@ def colorear_feriados():
             color = {"red": 1, "green": 1, "blue": 1}  # Blanco.-
             text_format = {"bold": False}
 
-        # ✅ THROTTLE: Log Respeta LOGS_CADA_HORA del .env ( MEMORY Ingeniería en Sistemas ).-
-        if activo:
-            log_throttled('info',
-                          f"(INFO) Día {row[0] if row else '?'} ACTIVADO — Marcado Como Día Nó Laborable ó Feriado...",
-                          logger)
-        else:
-            log_throttled('info',
-                          f"(INFO) Día {row[0] if row else '?'} DESACTIVADO — Sé Quitó Formato dé Día Nó Laborable ó Feriado...",
-                          logger)
+            # AHORA és Cada 03 Horas ( 10800 segundos ).-
+            # ✅ THROTTLE: Log Respeta LOGS_CADA_HORA del .env ( MEMORY Ingeniería en Sistemas ).-
+            if activo:
+                log_throttled('info',
+                              f"(INFO) Procesando y Verificando Días Nó Laborables ó Feriados Activos...",
+                              logger)
+            else:
+                log_throttled('info',
+                              f"(INFO) Procesando y Verificando Días Nó Laborables ó Feriados Desactivados...",
+                              logger)
 
         # Aplicar Formato a Columnas A, B, C y D (índices 0—3)
         requests.append({
@@ -2069,7 +2070,7 @@ def colorear_feriados():
             ).execute()
 
             log_throttled('info',
-                          f"(DEBUG) Coloreado dé {len(requests)} Filas en '{FERIADOS_SHEET}' Completado...",
+                          f"(DEBUG) Formato Automático y Coloreado de Filas en '{FERIADOS_SHEET}' Completado...",
                           logger)
 
         except HttpError as e:
