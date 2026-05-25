@@ -28,19 +28,28 @@ __pycache__/
 .Python
 
 # Backups y Carpetas de Usuario
-..BUps/
+....BUps/
+
+# Instalación_en_Clientes
+...Instalación_en_Clientes/
 
 # Documentación del Proyecto
-..Documentación
+..Documentación/
 
 # Fotos del Proyecto
 ..Fotos/
 
 # Comandos para GitHub
-..GitHub_Comandos
+..GitHub_Comandos/
 
-# Comandos para RailWay
-..RailWay_Comandos
+# Google_Sheets
+..Google_Sheets/
+
+# Meta
+..Meta/
+
+# RailWay_Comandos_Facturas
+..RailWay_Comandos_Facturas/
 
 # Build / packaging
 build/
