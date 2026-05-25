@@ -431,16 +431,22 @@ def confirmar_reserva(reservation_id):
 def liberar_reservas_expiradas():
     """
     Busca y Marca como Expiradas las Reservas que Superaron el Tiempo Límite.
-    Ejecutado Periódicamente Cada 120 Minutos por él scheduler.-
+    Ejecutado Periódicamente Cada 01 Minuto por él scheduler.-
     """
     # ---------------------------------------------------------------------------------
-    # CONTROL DE LOGS ( RAILWAY ): 120 Ciclos de 30 Segundos = 01 Hora.-
+    # CONTROL DE LOGS ( RAILWAY ): 10800 Segundos = 03 Horas.-
     # ---------------------------------------------------------------------------------
     # Busca y Marca como Expiradas las Reservas que Superaron el Tiempo Límite.
-    # Ejecutado Periódicamente Cada 120 Minutos por él scheduler.-
+    # Ejecutado Periódicamente Cada 01 Minuto por él scheduler.-
 
-    log_throttled('info', ">>> 🔄 Estado: El Proceso 'liberar_reservas_expiradas()' Sigue Activo ( Resúmen Cada Hora )...", logger)
-
+    # LOG DE MONITOREO RUTINARIO ( MEMORY Ingeniería en Sistemas ).-
+    # Muestra que el hilo sigue vivo sín Inundar el Log de Railway en MODO: production.-
+    log_throttled(
+        'info',
+        f">>> 🔄 Estado: El Proceso 'liberar_reservas_expiradas()' "
+        f"Sigue Activo ( Resúmen Cada 03 Horas )...",
+        logger_ref=logger
+    )
 
     # ---------------------------------------------------------------------------------
     # ✅ SOLUCIÓN A REFERENCIAS ( MEMORY Ingeniería en Sistemas ):
@@ -485,7 +491,7 @@ def liberar_reservas_expiradas():
                     # Calculamos el Punto Exacto de Expiración.-
                     limite_expiracion = ts + timedelta(seconds=RESERVA_SECONDS)
 
-                    # COMPARACIÓN: Si el límite ya pasó respecto a 'now'.-
+                    # COMPARACIÓN: Si el límite ( 01 Minuto ), yá pasó respecto a 'now'.-
                     if now > limite_expiracion:
                         logger.info(f"⚠️ Marcando Reserva {row[11]} como EXPIRADA...")
 
