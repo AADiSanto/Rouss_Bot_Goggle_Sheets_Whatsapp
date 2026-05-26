@@ -481,12 +481,18 @@ def process_text_message(sender, text):
             icono_srv = SERVICE_ICONS.get(state['servicio'], '')
 
             if horarios:
-                horarios_text = '\n'.join([f"⏰ {h}" for h in horarios])
+                num_emojis = {1: '1️⃣', 2: '2️⃣', 3: '3️⃣', 4: '4️⃣', 5: '5️⃣', 6: '6️⃣', 7: '7️⃣',
+                              8: '8️⃣', 9: '9️⃣', 10: '🔟', 11: '1️⃣1️⃣', 12: '1️⃣2️⃣', 13: '1️⃣3️⃣',
+                              14: '1️⃣4️⃣', 15: '1️⃣5️⃣', 16: '1️⃣6️⃣', 17: '1️⃣7️⃣', 18: '1️⃣8️⃣'}
+                state['horarios_map'] = {str(i + 1): h for i, h in enumerate(horarios)}
+                horarios_text = '\n'.join([f"{num_emojis.get(i + 1, str(i + 1) + '.')} {h}"
+                                           for i, h in enumerate(horarios)])
                 send_message(sender,
-                             f"Horarios Disponibles para: {state['coiffeur']} ({icono_srv} {state['servicio']}) el {dia_esp} {text}:\n\n"
+                             f"Horarios Disponibles para: ..."
                              f"{horarios_text}\n\n"
                              "⚠️ Tenés 01 Minuto para Elegir y Confirmar Tú Reserva...\n\n"
-                             "Escribí el Horario que Preferís ( Ej.: 11:00 )...")
+                             "Escribí el Número del Horario que Preferís...")
+
                 state['step'] = 4
             else:
                 send_message(sender,
@@ -497,30 +503,24 @@ def process_text_message(sender, text):
             send_message(sender,
                          "ERROR: Formato de Fecha Incorrecto, Por Favor usá: DD-MM-AAAA\nEj.: 15-10-2025")
 
-
     elif step == 4:
-        # Selección del Horario para la Fecha del Turno Elegida por el Cliente.-
-        hora = text.strip()
+        # Selección del Horario por Número - Validación Dinámica.-
+        horarios_map = state.get('horarios_map', {})
 
-        # Validar Formato de la Hora Elegida.-
-        if not hora.replace(':', '').isdigit() or len(hora) not in [4, 5]:
-            send_message(sender, "ERROR: Por Favor Escribí la Hora en Formato HH:MM ( Ej.: 11:00 )")
-            return
+        # Buscar el Número Escrito por el Cliente en el Mapa de Horarios.-
+        hora = horarios_map.get(text.strip())
 
-        # --- VALIDACIÓN COMPLETA DE FECHA Y HORA (Incluye Rango 09:00-18:30).-
-        try:
-            validar_fecha_hora_turno(state['fecha'], hora)
-        except ValueError as e:
-            send_message(sender, str(e))
-            return
-
-        # Verificar Disponibilidad de la Hora Elegida.-
-        # Antes de Crear la Reserva Verificar Nuevamente Sí és Feriado.-
-        from sheets.sheet_service import es_feriado
-
-        if es_feriado(state['fecha']):
+        if not hora:
+            # Regenerar Lista para Mostrar al Cliente.-
+            num_emojis = {1: '1️⃣', 2: '2️⃣', 3: '3️⃣', 4: '4️⃣', 5: '5️⃣', 6: '6️⃣', 7: '7️⃣',
+                          8: '8️⃣', 9: '9️⃣', 10: '🔟', 11: '1️⃣1️⃣', 12: '1️⃣2️⃣', 13: '1️⃣3️⃣',
+                          14: '1️⃣4️⃣', 15: '1️⃣5️⃣', 16: '1️⃣6️⃣', 17: '1️⃣7️⃣', 18: '1️⃣8️⃣'}
+            lista_horarios = '\n'.join([
+                f"{num_emojis.get(int(k), k + '.')} {v}"
+                for k, v in sorted(horarios_map.items(), key=lambda x: int(x[0]))
+            ])
             send_message(sender,
-                         f"⚠️ Lo Siento, El Salón Permanece Cerrado el {state['fecha_display']} por Día Nó Laborable o Feriado,\n\nPor Favor Elegí Otra Fecha Disponible...")
+                         f"⚠️ Nó Entendí Tú Respuesta. Por Favor Escribí él Número del Horario:\n\n{lista_horarios}")
             return
 
         # -----------------------------------------------------------------------
