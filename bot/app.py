@@ -331,7 +331,7 @@ def process_text_message(sender, text):
 
         if coiffeur_selected:
             state['coiffeur'] = coiffeur_selected
-            send_message(sender, f"Perfecto, Elegiste a {coiffeur_selected}.\n\n¿Cuál es Tú Nombre?:")
+            send_message(sender, f"Perfecto, Elegiste a {coiffeur_selected}.\n\n¿Cuál és Tú Nombre y Apellido?:")
             state['step'] = 1.5
         else:
             # Mensaje de Error con Lista de IDs Disponibles.-
@@ -340,7 +340,7 @@ def process_text_message(sender, text):
                          f"⚠️ No Entendí Tú Respuesta. Por Favor Escribí el Número del Coiffeur:\n\n{staff_list}")
 
     elif step == 1.5:
-        # Captura del Nombre del Cliente.-
+        # Captura del Nombre y Apellido del Cliente.-
         state['nombre'] = text.strip()
         state['telefono'] = sender
 
@@ -372,7 +372,7 @@ def process_text_message(sender, text):
         send_message(
             sender,
             f"Gracias {state['nombre']}. ¿Qué Servicio Necesitás?...:\n\n{lista_servicios}\n"
-            f"Escribí el Número del Servicio de Tú Preferencia.\n\n"
+            f"Escribí el Número del Servicio de Tú Preferencia...\n\n"
             f"💡 *Tip:* Sí Té Equivocás, Escribí *'Error'* para Empezar de Nuevo.-"
         )
         state['step'] = 2
