@@ -337,7 +337,7 @@ def process_text_message(sender, text):
             # Mensaje de Error con Lista de IDs Disponibles.-
             staff_list = '\n'.join([f"  {item['id']} → {item['nombre']}" for item in staff_data])
             send_message(sender,
-                         f"⚠️ No Entendí Tú Respuesta. Por Favor Escribí el Número del Coiffeur:\n\n{staff_list}")
+                         f"⚠️ Nó Entendí Tú Respuesta. Por Favor Escribí el Número del Coiffeur:\n\n{staff_list}")
 
     elif step == 1.5:
         # Captura del Nombre y Apellido del Cliente.-
@@ -384,7 +384,7 @@ def process_text_message(sender, text):
 
         if not servicios_data:
             send_message(sender,
-                         "⚠️ ERROR: Nó Háy Servicios Definidos én él Negocio...\n"
+                         "❌ ERROR: Nó Háy Servicios Definidos én él Negocio...\n"
                          "Por Favor Comunicáte con él Salón, Gracias...")
             return
 
@@ -409,7 +409,7 @@ def process_text_message(sender, text):
                 for item in servicios_data
             ])
             send_message(sender,
-                         f"⚠️ Nó Entendí Tú Respuesta. Por Favor Escribí él Número del Servicio:\n\n{lista_srv}")
+                         f"⚠️ {state['nombre']}, Nó Entendí Tú Respuesta. Por Favor Escribí él Número del Servicio:\n\n{lista_srv}")
             return
 
         # Servicio Válido Seleccionado - Guardar Nombre y Costo en el Estado.-
@@ -417,7 +417,8 @@ def process_text_message(sender, text):
         state['costo'] = costo_elegido
 
         send_message(sender,
-                     f"Servicio: {state['servicio']} ✓\n\n"
+                     f"Servicio : {state['servicio']} ✓\n\n"
+                             f"Cliente/a: {state['nombre']} ✓\n\n"
                      "¿Qué Día Té Gustaría Venir?\n\n"
                      "Por Favor Escribí Lá Fecha én Formato: DD-MM-AAAA\n"
                      "Ej.: 15-10-2025")
@@ -471,7 +472,8 @@ def process_text_message(sender, text):
             from sheets.sheet_service import es_feriado
             if es_feriado(fecha_formatted):
                 send_message(sender,
-                             f"⚠️ Lo Siento, El Salón Permanece Cerrado el {text} por Día Nó Laborable o Feriado,\n\nPor Favor Elegí Otra Fecha Disponible, Gracias...")
+                             f"⚠️ Lo Siento {state['nombre']}, El Salón Permanece Cerrado él {text} por Día Nó Laborable o Feriado,\n\n"
+                                         "Por Favor Elegí Otra Fecha Disponible, Gracias...")
                 return
 
             # Obtener Horarios Disponibles para la Fecha del Turno Elegida por el Cliente.-
@@ -490,13 +492,13 @@ def process_text_message(sender, text):
                 send_message(sender,
                              f"Horarios Disponibles para: ..."
                              f"{horarios_text}\n\n"
-                             "⚠️ Tenés 01 Minuto para Elegir y Confirmar Tú Reserva...\n\n"
+                             f"⚠️ {state['nombre']}, Tenés 01 Minuto para Elegir y Confirmar Tú Reserva...\n\n"
                              "Escribí el Número del Horario que Preferís...")
 
                 state['step'] = 4
             else:
                 send_message(sender,
-                             f"Lo Siento, Nó Hay Horarios Disponibles para: {state['coiffeur']} ({icono_srv} {state['servicio']}) el {dia_esp} {text}. ¿Querés Probar con Otra Fecha?...")
+                             f"Lo Siento {state['nombre']}, Nó Hay Horarios Disponibles para: {state['coiffeur']} ({icono_srv} {state['servicio']}) el {dia_esp} {text}. ¿Querés Probar con Otra Fecha?...")
                 state['step'] = 3
 
         except ValueError:
@@ -520,7 +522,7 @@ def process_text_message(sender, text):
                 for k, v in sorted(horarios_map.items(), key=lambda x: int(x[0]))
             ])
             send_message(sender,
-                         f"⚠️ Nó Entendí Tú Respuesta. Por Favor Escribí él Número del Horario:\n\n{lista_horarios}")
+                         f"⚠️ {state['nombre']}, Nó Entendí Tú Respuesta. Por Favor Escribí él Número del Horario:\n\n{lista_horarios}")
             return
 
         # -----------------------------------------------------------------------
@@ -532,8 +534,8 @@ def process_text_message(sender, text):
         except Exception as e:
             logger.error(f"ERROR: al Verificar Disponibilidad ( check_availability ): {type(e).__name__}: {e}")
             send_message(sender,
-                         "⚠️ Hubo un Problema de Conexión al Verificar el Horario...\n\n"
-                         "Por Favor Intentá Nuevamente Escribiendo el Mismo Horario...")
+                         f"⚠️ {state['nombre']}, Hubo un Problema dé Conexión ál Verificar él Horario...\n\n"
+                                     "Por Favor Intentá Nuevamente Escribiendo él Mismo Horario...")
             return
 
         if disponible:
@@ -553,8 +555,8 @@ def process_text_message(sender, text):
             except Exception as e:
                 logger.error(f"ERROR: al Crear Reserva Provisional: {type(e).__name__}: {e}")
                 send_message(sender,
-                             "⚠️ Hubo un Problema de Conexión al Generar Tú Reserva...\n\n"
-                             "Por Favor Intentá Nuevamente Escribiendo el Mismo Horario...")
+                             f"⚠️ {state['nombre']}, Hubo un Problema de Conexión al Generar Tú Reserva...\n\n"
+                                         "Por Favor Intentá Nuevamente Escribiendo el Mismo Horario...")
                 return
 
             state['reservation_id'] = reservation_id
@@ -568,16 +570,18 @@ def process_text_message(sender, text):
 
             send_message(sender,
                          f"📋 *Reserva Temporal Creada:*\n\n"
-                         f"👤 Coiffeur: {state['coiffeur']}\n"
-                         f"📅 Fecha: {state.get('fecha_dia_esp', '')} {state['fecha_display']}\n"
-                         f"⏰ Hora: {hora}\n"
+                         f"👤 Cliente/a: {state['nombre']}\n"
+                         f"👤 Coiffeur : {state['coiffeur']}\n"
+                         f"📅 Fecha    : {state.get('fecha_dia_esp', '')} {state['fecha_display']}\n"
+                         f"⏰ Hora     : {hora}\n"
                          f"{icono_srv} Servicio: {state['servicio']}\n\n"
                          f"⚠️ *IMPORTANTE:* Escribí 'CONFIRMAR' en los Próximos 60 Segundos ( 01 Minuto ), para Asegurar Tú Turno...")
             state['step'] = 5
 
         else:
             send_message(sender,
-                         f"⚠️ Lo Siento, ese Horario Yá Fue Reservado...\nPor Favor Elegí Otro de la Lista...")
+                         f"⚠️ Lo Siento {state['nombre']}, ese Horario Yá Fué Reservado...\n"
+                                      "Por Favor Elegí Otro de la Lista...")
 
     elif step == 5:
         # ← ← ← ANTI-DUPLICADOS / REENVÍO AUTOMÁTICO DE WHATSAPP ← ← ←
@@ -602,14 +606,17 @@ def process_text_message(sender, text):
                             row[6] = 'Expirada'
                             row[7] = 'FALSE'
                             update_row(i, row)
-                            logger.info(f"Reserva {state['reservation_id']} Expirada detectada en app.py")
+                            logger.info(f"Reserva {state['reservation_id']} Expirada Detectada en app.py")
                             break
                 except Exception as e:
                     logger.error(f"ERROR: al Marcar Reserva como Expirada: {e}")
 
                 send_message(sender,
-                             "⚠️ ⏰ Lo Siento, Tú Reserva del Turno, Expiró ( Pasó Más De 01 Minuto ),\n\nPor Favor Comenzá de Nuevo Escribiendo 'Turno'...")
+                             f"⚠️ ⏰ Lo Siento: {state['nombre']}, Tú Reserva del Turno, Expiró ( Pasó Más De 01 Minuto ),\n\n"
+                                          "Por Favor Comenzá de Nuevo Escribiendo 'Turno'...")
+
                 conversations[sender] = {'step': 0}
+
                 return
 
         # --- Procesar las palabras clave ---
@@ -620,9 +627,12 @@ def process_text_message(sender, text):
             if success:
                 state['confirmado'] = True
                 icono_srv = SERVICE_ICONS.get(state['servicio'], '✂️')
+
                 conversations[sender] = {'step': 0}
+
                 send_message(sender,
-                             f"✔ ¡ TURNO CONFIRMADO !\n\n"
+                             f"✔ ¡ TURNO CONFIRMADO !...\n\n"
+                             f"👤 Cliente/a : {state['nombre']}\n"
                              f"👤 Coiffeur  : {state['coiffeur']}\n"
                              f"📅 Fecha     : {state.get('fecha_dia_esp', '')} {state['fecha_display']}\n"
                              f"⏰ Hora      : {state['hora']}\n"
@@ -631,8 +641,9 @@ def process_text_message(sender, text):
                 return
             else:
                 conversations[sender] = {'step': 0}
+
                 send_message(sender,
-                             "⚠️ ⏰ Lo Siento, Tú Reserva Expiró... Por Favor Comenzá de Nuevo Escribiendo 'Turno'...")
+                             f"⚠️ ⏰ Lo Siento: {state['nombre']}, Tú Reserva Expiró... Por Favor Comenzá de Nuevo Escribiendo 'Turno', Gracias...")
                 return
 
         elif 'cancelar' in text_lower:
@@ -649,16 +660,18 @@ def process_text_message(sender, text):
                 except Exception as e:
                     logger.error(f"ERROR: al Cancelar Reserva: {e}")
 
-            send_message(sender, "Reserva Cancelada. Sí Querés Agendar Otro Turno, Escribí 'Turno'...")
+            send_message(sender, f"{state['nombre']}, Reserva Cancelada. Sí Querés Agendar Otro Turno, Escribí 'Turno'...")
+
             conversations[sender] = {'step': 0}
+
             return
 
         else:
             # Si llegó aquí, es porque NO expiró y NO escribió confirmar/cancelar
             send_message(sender,
-                         "⚠️ Tenés una Reserva Pendiente!!!\n\n"
-                         "Por Favor, Respondé *'CONFIRMAR'* para Asegurar Tú Lugar o *'CANCELAR'*.\n"
-                         "¡Recordá que Sólo Tenés 01 Minuto Desde qué Elegiste él Horario!...")
+                         f"⚠️ {state['nombre']}, Tenés una Reserva Pendiente!!!\n\n"
+              "Por Favor, Respondé *'CONFIRMAR'* para Asegurar Tú Lugar o *'CANCELAR'*.\n"
+              "¡Recordá qué Sólo Tenés 01 Minuto desde qué Elegiste él Horario!...")
 
 
 # Procesa Respuestas de Mensajes Interactivos ( Listas, Botones ).-
