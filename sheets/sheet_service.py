@@ -1265,6 +1265,12 @@ def get_available_slots(coiffeur, fecha):
     # Generar Horarios Según Configuración del Negocio.-
     all_slots = generar_horarios_disponibles_dia(fecha)
 
+    # Filtrar Horarios Pasados Sí la Fecha es Hoy.-
+    hoy_iso = obtener_ahora().strftime('%Y-%m-%d')
+    if fecha == hoy_iso:
+        hora_actual_str = obtener_ahora().strftime('%H:%M')
+        all_slots = [slot for slot in all_slots if slot > hora_actual_str]
+
     if not all_slots:
         return []  # Día Completo Cerrado.-
 
