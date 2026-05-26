@@ -36,31 +36,25 @@ Servicio de Integración con Google Sheets.-
 Gestiona Lectura, Escritura y Actualización de Turnos.-
 """
 
-import logging
-
+from datetime import datetime
 from dotenv import load_dotenv
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+import json
+import logging
+# ZONAS HORARIAS CENTRALIZADAS ( MEMORY Ingeniería en Sistemas ):
+# Al Estar Ambos Archivos en la Misma Carpeta 'sheets/', sé Importa Directamente.-
+from sheets.utils import obtener_ahora, tz, log_throttled, normalizar_hora
+import os
+from pathlib import Path
+import time
+import sys
 
 logger = logging.getLogger(__name__)
 #Nó Imprimir los 'Emojis'.-
 logging.getLogger(__name__).handlers.clear()
 
-import os
-import sys
-
 sys.stdout.reconfigure(encoding='utf-8')
-
-from pathlib import Path
-
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-
-from datetime import datetime
-
-import json
-
-# ZONAS HORARIAS CENTRALIZADAS ( MEMORY Ingeniería en Sistemas ):
-# Al Estar Ambos Archivos en la Misma Carpeta 'sheets/', sé Importa Directamente.-
-from sheets.utils import obtener_ahora, tz, log_throttled, normalizar_hora
 
 # Forzar La Carga de Variables Sí Existe un .env Local,
 # pero Railway Las Inyectará Directamente.-
@@ -118,7 +112,6 @@ def save_spreadsheet_id_for_year(year, spreadsheet_id):
     # Opcional: Guardar en Archivo para Persistencia entre Reinicios.-
     try:
         config_file = HERE / 'spreadsheet_ids.json'
-        import json
 
         # Leer IDs existentes.-
         if config_file.exists():
@@ -146,7 +139,6 @@ TIMEZONE = 'America/Argentina/Buenos_Aires'
 
 # Verificación: Archivo de Credenciales Presente para Prueba en Modo Local con NGrok.-
 # Leer variable UNA sola vez
-import os
 from google.oauth2 import service_account
 
 print("🔥 MODO CARGA CREDENCIALES")
@@ -159,7 +151,6 @@ if os.getenv("RAILWAY_ENVIRONMENT"):
     if not credentials_json:
         raise RuntimeError("GOOGLE_CREDENTIALS_JSON Nó Encontrado en Railway...")
 
-    import json
     credentials_info = json.loads(credentials_json)
 
     credentials = service_account.Credentials.from_service_account_info(
@@ -1103,22 +1094,28 @@ def read_sheet(range_a1=None):
         range_a1 = 'A2:N1000'  # ← Lee las 13 Columnas Reales, Incluír Columna N FechaISO para Ordenar Fechas.-.-
 
     full_range = _safe_range(SHEET_NAME, range_a1)  # ← MANTENER ESTA INDENTACIÓN.-
-    try:
-        with _api_lock:
-            result = _build_service().spreadsheets().values().get(
-                spreadsheetId=SPREADSHEET_ID,
-                range=full_range
-            ).execute()
+    for intento in range(2):
+        try:
+            with _api_lock:
+                result = _build_service().spreadsheets().values().get(
+                    spreadsheetId=SPREADSHEET_ID,
+                    range=full_range
+                ).execute()
+            return result.get('values', [])
 
-    except HttpError as e:
-        print("ERROR al read_sheet. Spreadsheet ID:", SPREADSHEET_ID)
-        print("Rango Pedido:", full_range)
-        print("HttpError:", e)
-        raise
+        except HttpError as e:
+            print("ERROR al read_sheet. Spreadsheet ID:", SPREADSHEET_ID)
+            print("Rango Pedido:", full_range)
+            print("HttpError:", e)
+            raise
 
-    return result.get('values', [])
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            _invalidar_servicio_hilo()
+            if intento == 1:
+                raise
+            time.sleep(1)
 
-
+    return []
 
 # *********************************************************************************************************************
 #  Función: es_feriado(fecha)
@@ -1966,7 +1963,6 @@ def colorear_feriados():
     # ----------------------------------------------------------------
     # Protección contra Timeouts: Limitar Ejecución.-
     # ----------------------------------------------------------------
-    import time
     _ultimo_coloreado = getattr(colorear_feriados, '_ultimo_coloreado', 0)
     ahora = time.time()
 
@@ -1980,24 +1976,32 @@ def colorear_feriados():
 
     FERIADOS_SHEET = 'Turnos_Feriados'
 
-    try:
-        full_range = _safe_range(FERIADOS_SHEET, 'A2:D100')
+    rows = []
+    for intento in range(2):
+        try:
+            full_range = _safe_range(FERIADOS_SHEET, 'A2:D100')
+            result = _build_service().spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range=full_range
+            ).execute()
+            rows = result.get('values', []) or []
+            break
 
-        result = _build_service().spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=full_range
-        ).execute()
+        except HttpError as e:
+            logger.error(f"ERROR al Leer Pestaña dé Feriados ( Colorear ): {e}")
+            return
 
-        rows = result.get('values', []) or []
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            _invalidar_servicio_hilo()
+            if intento == 1:
+                logger.error(f"ERROR / TIMEOUT ál Leer Feriados ( Colorear ): {type(e).__name__}: {e}")
+                return
+            time.sleep(1)
 
-    except HttpError as e:
-        logger.error(f"ERROR al Leer Pestaña dé Feriados ( Colorear ): {e}")
-        return
-
-    except Exception as e:
-        logger.error(f"ERROR / TIMEOUT ál Leer Feriados ( Colorear ): {type(e).__name__}: {e}")
-        _invalidar_servicio_hilo()
-        return
+        except Exception as e:
+            logger.error(f"ERROR / TIMEOUT ál Leer Feriados ( Colorear ): {type(e).__name__}: {e}")
+            _invalidar_servicio_hilo()
+            return
 
     sheet_id = obtener_sheet_id(FERIADOS_SHEET)
     if sheet_id is None:
@@ -2075,8 +2079,10 @@ def colorear_feriados():
 
         except HttpError as e:
             logger.error(f"ERROR al Colorear Feriados: {e}")
+
         except Exception as e:               # ← Captura SSL, Timeout y Cualquier Otro Error.-
             logger.error(f"ERROR / TIMEOUT al Colorear Feriados: {type(e).__name__}: {e}")
+            _invalidar_servicio_hilo()  # ← Forzar Reconexión en el Próximo Ciclo.-
 
 # --------------------------------------------------------------------------------
 # Lectura Dinámica del Staff desde Google Sheets.-
