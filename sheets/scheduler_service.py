@@ -40,6 +40,7 @@ import inspect
 import logging
 import os
 import sys
+import time
 import uuid
 import socket
 
@@ -465,8 +466,16 @@ def liberar_reservas_expiradas():
     # El timeout ya está configurado en el cliente httplib2 dentro de sheet_service.
     try:
         data = read_sheet()
+    except (BrokenPipeError, ConnectionResetError, OSError) as e:
+        _invalidar_servicio_hilo()
+        time.sleep(1)
+        try:
+            data = read_sheet()
+        except Exception as e2:
+            logger.error(f"TIMEOUT al Leer Sheet: {type(e2).__name__}: {e2}")
+            return
     except Exception as e:
-        logger.error(f"ERROR / TIMEOUT al Leer Sheet: {type(e).__name__}: {e}")
+        logger.error(f"TIMEOUT al Leer Sheet: {type(e).__name__}: {e}")
         _invalidar_servicio_hilo()
         return
 
