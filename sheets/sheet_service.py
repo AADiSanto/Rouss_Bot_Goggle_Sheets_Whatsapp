@@ -1957,12 +1957,12 @@ def obtener_sheet_id(nombre_hoja):
         except (BrokenPipeError, ConnectionResetError, OSError) as e:
             _invalidar_servicio_hilo()
             if intento == 1:
-                logger.error(f"ERROR al Obtener sheetId Para: '{nombre_hoja}': {e}")
+                logger.error(f"al Obtener sheetId Para: '{nombre_hoja}': {e}")
                 return None
             time.sleep(1)
 
         except Exception as e:
-            logger.error(f"ERROR al Obtener sheetId Para: '{nombre_hoja}': {e}")
+            logger.error(f"al Obtener sheetId Para: '{nombre_hoja}': {e}")
             return None
 
     return None
