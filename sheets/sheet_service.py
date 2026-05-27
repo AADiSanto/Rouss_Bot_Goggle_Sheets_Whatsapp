@@ -1945,16 +1945,25 @@ def actualizar_calendario_dia(fecha_objetivo):
 
 def obtener_sheet_id(nombre_hoja):
     """Devuelve el SheetId ( numérico ) de una Pestaña, Requerido para BatchUpdate..."""
-    try:
-        spreadsheet = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
+    for intento in range(2):
+        try:
+            spreadsheet = _build_service().spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
 
-        for sheet in spreadsheet.get('sheets', []):
-            props = sheet.get("properties", {})
-            if props.get("title") == nombre_hoja:
-                return props.get("sheetId")
+            for sheet in spreadsheet.get('sheets', []):
+                props = sheet.get("properties", {})
+                if props.get("title") == nombre_hoja:
+                    return props.get("sheetId")
 
-    except Exception as e:
-        logger.error(f"ERROR al Obtener sheetId Para: '{nombre_hoja}': {e}")
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            _invalidar_servicio_hilo()
+            if intento == 1:
+                logger.error(f"ERROR al Obtener sheetId Para: '{nombre_hoja}': {e}")
+                return None
+            time.sleep(1)
+
+        except Exception as e:
+            logger.error(f"ERROR al Obtener sheetId Para: '{nombre_hoja}': {e}")
+            return None
 
     return None
 
