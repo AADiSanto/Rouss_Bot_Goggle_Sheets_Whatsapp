@@ -8,9 +8,9 @@
 #
 #    "Module Purpose:   Punto de Entrada Principal del Bot de WhatsApp para Gestión de Turnos.-
 #                       Inicializa el Servidor Flask en el Puerto Especificado, Configura el Scheduler
-#                       para Procesamiento Automático de Reservas cada 30 Segundos, y Ejecuta el Coloreo
-#                       Automático de Feriados en Google Sheets al Iniciar la Aplicación.-
-#
+#                       para Procesamiento Automático de Reservas ( Intervalo Configurable desde .env ),
+#                       y Ejecuta el Coloreo Automático de Feriados en Google Sheets,
+#                       ( Intervalo Configurable desde .env ), al Iniciar la Aplicación.-
 #
 # *********************************************************************************************************************
 #
@@ -125,13 +125,12 @@ except Exception as e:
 # INICIO DEL SISTEMA ( MEMORY Ingeniería en Sistemas )
 # ---------------------------------------------------------------------------------
 
-# Iniciar Scheduler ( Verificar Cada 30 Segundos... ).-
+# Iniciar Scheduler - Intervalo Configurable desde .env ( TIEMPO_LIBERAR_RESERVAS_SEGUNDOS ).-
 if SYSTEM_MODE != "production":
     print("⏰ Iniciando Scheduler de Reservas...")
 
 try:
-    # Iniciar Scheduler - Intervalo Configurable desde .env ( TIEMPO_LIBERAR_RESERVAS_SEGUNDOS ).-
-    ...
+    # Iniciar Scheduler.-
     scheduler = iniciar_scheduler()
 
     # ✅ Verificación de Seguridad y Confirmación de Jobs.-
