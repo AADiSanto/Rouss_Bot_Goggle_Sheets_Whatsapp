@@ -128,7 +128,8 @@ SYSTEM_MODE = os.getenv("SYSTEM_MODE", "disabled").lower()
 
 # En Producción ( RailWay ) Usamos WARNING Para Evitar Saturar Registros.-
 # En Desarrollo ( PyCharm / NGrok ) Mantenemos INFO Para Supervisar él Flujo.-
-LOG_LEVEL = logging.WARNING if SYSTEM_MODE == "production" else logging.INFO
+_FLASK_ENV = os.getenv("FLASK_ENV", "production").lower()
+LOG_LEVEL = logging.WARNING if _FLASK_ENV == "production" else logging.INFO
 
 logging.basicConfig(
     level=LOG_LEVEL,
@@ -698,9 +699,11 @@ if __name__ == '__main__':
     # El Scheduler es VITAL: és él Encargado de Liberar Los Turnos Si el Cliente
     # No Escribe "CONFIRMAR" en 60 Segundos.-
     try:
-        # Se Inicia el Scheduler Para Limpiar Reservas Expiradas Cada 30 Segundos.-
-        iniciar_scheduler(interval_seconds=30)
+        # Se Inicia el Scheduler - Intervalo Configurable desde .env ( TIEMPO_LIBERAR_RESERVAS_SEGUNDOS ).-
+        iniciar_scheduler()
+
         logger.info("⏰ Scheduler Sincronizado Correctamente.-")
+
     except Exception as e:
         logger.error(f"❌ ERROR al Iniciar Scheduler: {e}")
 

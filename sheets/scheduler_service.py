@@ -553,17 +553,35 @@ def liberar_reservas_expiradas():
 
 
 #Inicia ( o Retorna ) el Scheduler de Tareas en Segundo Plano.-
-def iniciar_scheduler(interval_seconds: int = 6):
+def iniciar_scheduler(interval_seconds: int = None):
     """
     Inicia ( o Retorna ) el Scheduler de Tareas en Segundo Plano.-
     - Evita Crear Múltiples Schedulers en el Mismo Proceso ( singleton ).-
     - Añade el Job ' liberar_reservas_expiradas ' con ' id ' para Prevenir Duplicados.-
     - Loguea el Módulo / Función que Solicitó el Inicio ( archivo:línea ).-
-    - Por Defecto usa 6s para Testing; Pasár Otro Valor si sé Quiere Cambiarlo.-
+    - El Intervalo se Configura desde .env ( TIEMPO_LIBERAR_RESERVAS_SEGUNDOS ).-
     """
     """Inicializa y Configura el Scheduler de Tareas en Segundo Plano."""
 
     global _SCHEDULER, _JOB_ID
+
+    # Resolver Intervalo desde .env Sí Nó sé Pasó Explícitamente.-
+    if interval_seconds is None:
+        interval_seconds = int(os.getenv('TIEMPO_LIBERAR_RESERVAS_SEGUNDOS', '360'))
+
+    # ── Configuración de Tiempos al Arrancar ──────────────────────────────────
+    _es_desarrollo = os.getenv('FLASK_ENV', 'production').lower() == 'development'
+    if _es_desarrollo or not getattr(iniciar_scheduler, '_config_logueada', False):
+        logger.info("=" * 55)
+        logger.info("⏱️  CONFIGURACIÓN DE TIEMPOS DEL SISTEMA:")
+        logger.info(f"   • TIEMPO_RESERVA_SEGUNDOS          : {RESERVA_SECONDS}s")
+        logger.info(f"   • TIEMPO_LIBERAR_RESERVAS_SEGUNDOS : {interval_seconds}s ({interval_seconds // 60} min)")
+        logger.info(f"   • TIEMPO_COLOREAR_FERIADOS_MINUTOS : {int(os.getenv('TIEMPO_COLOREAR_FERIADOS_MINUTOS', '60'))} min")
+        logger.info(f"   • LOGS_RESUMIDOS                   : {os.getenv('LOGS_RESUMIDOS', 'false').upper()}")
+        logger.info(f"   • LOGS_INTERVALO_HORAS             : {os.getenv('LOGS_INTERVALO_HORAS', '3')}h")
+        logger.info("=" * 55)
+        iniciar_scheduler._config_logueada = True
+    # ─────────────────────────────────────────────────────────────────────────
 
     # Registrar el "caller" para depuración
     stack = inspect.stack()
@@ -608,7 +626,7 @@ def iniciar_scheduler(interval_seconds: int = 6):
         logger.info(f"(scheduler) Job '{_JOB_ID}' Agregado al Scheduler")
 
         # -------------------------------------------------------------------------------------
-        # Nuevo Job: Actualiza Colores de Feriados Cada 15 Minutos ( Sólo Formato Visual ).-
+        # Nuevo Job: Actualiza Colores de Feriados ( Intervalo desde .env ).-
         # -------------------------------------------------------------------------------------
         try:
             from sheets.sheet_service import colorear_feriados
@@ -617,13 +635,13 @@ def iniciar_scheduler(interval_seconds: int = 6):
             def colorear_feriados_safe():
                 try:
                     # -------------------------------------------------------------------------
-                    # CONTROL DE LOGS: 4 Ciclos dé 15 Minutos = 01 Hora.-
+                    # CONTROL DE LOGS: Resúmen Según LOGS_INTERVALO_HORAS del .env.-
                     # -------------------------------------------------------------------------
                     contador = getattr(colorear_feriados_safe, '_contador', 0)
 
                     # Ejecutamos Lá Función Dé Coloreo.-
                     colorear_feriados()
-                    log_throttled('info',">>> 🎨 Estado: El Proceso 'colorear_feriados()' Sigue Activo ( Resúmen Cada Hora )...",logger)
+                    log_throttled('info', ">>> 🎨 Estado: El Proceso 'colorear_feriados()' Sigue Activo ( Resúmen Según .env )...", logger)
 
                 except Exception as e:
                     # Los errores SIEMPRE se informan de inmediato.-
@@ -634,14 +652,14 @@ def iniciar_scheduler(interval_seconds: int = 6):
 
             _SCHEDULER.add_job(
                 colorear_feriados_safe, 'interval',   # ← Usar wrapper.-
-                minutes=15,
+                minutes=int(os.getenv('TIEMPO_COLOREAR_FERIADOS_MINUTOS', '60')),
                 id='colorear_feriados',
                 max_instances=1,          # ← Evita Ejecuciones Paralelas.-
                 coalesce=True,            # ← Unifica Ejecuciones Atrasadas.-
                 misfire_grace_time=60     # ← Mayor Tolerancia ( Tarea Menos Crítica ).-
             )
 
-            logger.info(f"(scheduler) Job 'colorear_feriados' Agregado ( Cada 15 Minutos )...")
+            logger.info(f"(scheduler) Job 'colorear_feriados' Agregado ( Cada {os.getenv('TIEMPO_COLOREAR_FERIADOS_MINUTOS', '60')} Minutos )...")
 
         except Exception as e:
             logger.error(f"(scheduler) ERROR: al Agregar Job colorear_feriados: {e}")
