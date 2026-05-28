@@ -290,7 +290,7 @@ def normalizar_fecha_a_iso(fecha):
         return fecha  # Devolver Sin Cambios Sí Nó Coincide.-
 
     except Exception as e:
-        logger.error(f"Error normalizando fecha '{fecha}': {e}")
+        logger.error(f"Error Normalizando Fecha: '{fecha}': {e}")
         return fecha
 
 
@@ -1550,10 +1550,12 @@ def check_availability(coiffeur, fecha, hora):
     Verifica si un Horario Específico está Disponible.-
 
     Returns:
-        bool: True si está Disponible, False si Está Ocupado.-
+        tuple: ( True,  None              ) → Disponible.-
+               ( False, None              ) → Ocupado por Turno Confirmado.-
+               ( False, segundos_restantes) → Ocupado por Reserva Pendiente Aún Activa.-
     """
 
-    # Función auxiliar para normalizar tildes y espacios.-
+    # Función Auxiliar para Normalizar Tildes y Espacios.-
     def _norm(texto):
         import unicodedata
         texto = texto.strip()
@@ -1563,11 +1565,11 @@ def check_availability(coiffeur, fecha, hora):
         )
         return texto.lower()
 
-    # Normalizar coiffeur y hora (🔥 FIX IMPORTANTE)
+    # Normalizar Coiffeur y Hora ( 🔥 FIX IMPORTANTE ).-
     coiffeur_norm = _norm(coiffeur)
     hora_norm = normalizar_hora(hora)
 
-    # Extraer Año de la Fecha y Configurar Hoja Activa.-
+    # Extraer Año dé lá Fecha y Configurar Hoja Activa.-
     try:
         fecha_iso = normalizar_fecha_a_iso(fecha)
         year = int(fecha_iso.split('-')[0])
@@ -1580,16 +1582,16 @@ def check_availability(coiffeur, fecha, hora):
         validar_fecha_hora_turno(fecha, hora_norm)
     except ValueError as e:
         print(str(e))
-        return False
+        return False, None
 
-    # Leer datos UNA sola vez
+    # Leer Datos UNA Sóla Vez.-
     try:
         data = read_sheet()
     except Exception as e:
         logger.error(f"ERROR al Leer Turnos: {e}")
-        return False
+        return False, None
 
-    # Mapa meses (evita redefinir en cada loop)
+    # Mapa dé Meses ( Evita Redefinir én Cáda Loop ).-
     meses = {
         'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
         'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
@@ -1613,25 +1615,44 @@ def check_availability(coiffeur, fecha, hora):
         # Normalizar Coiffeur Desde la Hoja.-
         row_coiffeur_norm = _norm(row[3])
 
-        # Normalizar Estado.-
-        estado = row[6].strip().lower()
-
-        # Sólo 'confirmado' Significa Ocupado.-
-        if estado != 'confirmado':
-            continue
-
         # Normalizar Hora de la Fila.-
         row_hora = normalizar_hora(row[5])
 
-        # Evaluar Disponibilidad.-
-        if (
-            row_coiffeur_norm == coiffeur_norm and
-            fecha_normalizada == fecha and
-            row_hora == hora_norm
-        ):
-            return False
+        # Verificar Sí Coinciden Coiffeur, Fecha y Hora.-
+        if not (row_coiffeur_norm == coiffeur_norm and
+                fecha_normalizada == fecha_iso and
+                row_hora == hora_norm):
+            continue
 
-    return True
+        # Normalizar Estado.-
+        estado = row[6].strip().lower()
+
+        # ── Turno Confirmado → Ocupado Definitivamente ────────────────────
+        if estado == 'confirmado':
+            return False, None
+
+        # ── Turno Pendiente Activo → Verificar Expiración ────────────────
+        if (estado == 'pendiente' and
+                len(row) >= 13 and
+                (row[7] or '').strip().upper() == 'TRUE'):
+
+            ts_expira_str = (row[12] or '').strip()
+
+            if ts_expira_str:
+                try:
+                    ts_expira = datetime.fromisoformat(ts_expira_str)
+                    segundos_restantes = (ts_expira - obtener_ahora()).total_seconds()
+
+                    if segundos_restantes > 0:
+                        # ← Pendiente Activo: Aún Nó Expiró, Informar él Tiempo Restante.-
+                        return False, int(segundos_restantes)
+
+                    # ← Pendiente Yá Expiró: Nó Bloquea ( Será Limpiado por él Scheduler ).-
+
+                except Exception:
+                    return False, None  # ← Nó sé Puede Parsear: Bloquear por Seguridad.-
+
+    return True, None
 
 
 #Elige el Coiffeur Según Preferencia y Disponibilidad.-
@@ -1981,7 +2002,7 @@ def colorear_feriados():
     _ultimo_coloreado = getattr(colorear_feriados, '_ultimo_coloreado', 0)
     ahora = time.time()
 
-    # Solo ejecutar si pasaron al menos 5 minutos (300 segundos)
+    # Sólo Ejecutar Sí Pasaron al Menos 05 Minutos ( 300 segundos ).-
     if ahora - _ultimo_coloreado < 300:
         logger.debug(f"Coloreado Omitido ( última Ejecución Hace {int(ahora - _ultimo_coloreado)}s)")
         return
