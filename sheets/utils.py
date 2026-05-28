@@ -84,7 +84,8 @@ def formatear_fecha_leible(fecha_dt):
 _ultimo_log: dict = {}
 
 # Leer el Flag desde .env.-
-LOGS_CADA_HORA = os.getenv('LOGS_CADA_HORA', 'false').lower() == 'true'
+LOGS_RESUMIDOS       = os.getenv('LOGS_RESUMIDOS', 'false').lower() == 'true'
+LOGS_INTERVALO_HORAS = int(os.getenv('LOGS_INTERVALO_HORAS', '3'))
 
 
 def log_throttled(nivel: str, mensaje: str, logger_ref=None):
@@ -102,16 +103,16 @@ def log_throttled(nivel: str, mensaje: str, logger_ref=None):
     es_error = nivel == 'error'
 
     # Los Errores SIEMPRE Salen Sin Importar el Flag.-
-    if es_error or not LOGS_CADA_HORA:
+    if es_error or not LOGS_RESUMIDOS:
         _emitir_log(nivel, mensaje, logger_ref)
         return
 
-    # Throttle: Sólo Emitir si Pasó más de 360 Segundos ( 06 Minutos ), desde la última Vez.-
+    # Throttle: Sólo Emitir 1 Vez Cada LOGS_INTERVALO_HORAS Horas.-
     ahora = datetime.now(tz)
     ultima = _ultimo_log.get(mensaje)
 
-     # Cada 3 Horas el Log.-
-    if ultima is None or (ahora - ultima) >= timedelta(hours=3):
+     # Tiempo en Horas en LOGS_INTERVALO_HORAS para Mostrar los Log's.-
+    if ultima is None or (ahora - ultima) >= timedelta(hours=LOGS_INTERVALO_HORAS):
         _ultimo_log[mensaje] = ahora
         _emitir_log(nivel, mensaje, logger_ref)
 
