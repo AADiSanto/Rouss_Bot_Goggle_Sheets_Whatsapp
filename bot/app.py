@@ -530,7 +530,7 @@ def process_text_message(sender, text):
         # BLOQUE PROTEGIDO: Errores de Red / SSL Nó Deben Silenciar al Bot.-
         # -----------------------------------------------------------------------
         try:
-            disponible = check_availability(state['coiffeur'], state['fecha'], hora)
+            disponible, segundos_pendiente = check_availability(state['coiffeur'], state['fecha'], hora)
 
         except Exception as e:
             logger.error(f"ERROR: al Verificar Disponibilidad ( check_availability ): {type(e).__name__}: {e}")
@@ -580,9 +580,18 @@ def process_text_message(sender, text):
             state['step'] = 5
 
         else:
-            send_message(sender,
-                         f"⚠️ Lo Siento {state['nombre']}, ese Horario Yá Fué Reservado...\n"
-                                      "Por Favor Elegí Otro de la Lista...")
+            if segundos_pendiente and segundos_pendiente > 0:
+                _min = segundos_pendiente // 60
+                _seg = segundos_pendiente % 60
+                _tiempo_str = f"{_min} min {_seg:02d} seg" if _min > 0 else f"{_seg} seg"
+                send_message(sender,
+                             f"⚠️ {state['nombre']}, él Horario *{hora}* Puede Desocuparse en: *{_tiempo_str}*\n\n"
+                             f"Sí Querés ése Horario, Tipeá *'Error'* y Comenzá de Nuevo Después de Esperar ese Tiempo,\n"
+                             f"de lo Contrario Seleccioná Otro Horario, Gracias...")
+            else:
+                send_message(sender,
+                             f"⚠️ Lo Siento {state['nombre']}, ese Horario Yá Fué Reservado...\n"
+                                          "Por Favor Elegí Otro de la Lista, Gracias...")
 
     elif step == 5:
         # ← ← ← ANTI-DUPLICADOS / REENVÍO AUTOMÁTICO DE WHATSAPP ← ← ←
