@@ -153,15 +153,15 @@ if __name__ == '__main__':
     print(f"***********************************************************************\n")
 
     # Import Único de la Variable de Control de Logs.-
-    from sheets.utils import LOGS_CADA_HORA
+    from sheets.utils import LOGS_INTERVALO_HORAS
 
     # Este Bloque Sólo Muestra Detalles Técnicos én Desarrollo Local ( PyCharm ).-
     # MODO Desarrollo.-
     if SYSTEM_MODE != "production":
-        print(f"🚀 Servidor Activo en Puerto: {port}")
-        print(f"📋 Webhook URL: http://localhost:{port}/webhook")
-        print(f"❤️  Health Check: http://localhost:{port}/health")
-        print(f"🔍 LOGS_CADA_HORA - Desarrollo: {LOGS_CADA_HORA}")
+        print(f"🚀 Servidor Activo en Puerto        : {port}")
+        print(f"📋 Webhook URL: http://localhost    :{port}/webhook")
+        print(f"❤️  Health Check: http://localhost  :{port}/health")
+        print(f"🔍 LOGS_INTERVALO_HORAS - Desarrollo: {LOGS_INTERVALO_HORAS}")
         print("🧪 Ejecutando en MODO DESARROLLO ( Flask Debug )...")
         # ✅ En Railway ( demo ) debug=False para Evitar Doble Carga de Módulos.-
         # En PyCharm Local ( sin RAILWAY_ENVIRONMENT ) debug=True para Desarrollo.-
@@ -170,7 +170,7 @@ if __name__ == '__main__':
 
     else:
         # MODO production.-
-        print(f"🔍 LOGS_CADA_HORA - production: {LOGS_CADA_HORA}")
+        print(f"🔍 LOGS_INTERVALO_HORAS - production: {LOGS_INTERVALO_HORAS}")
         # En Producción ( RailWay ) Arrancamos Sín Debug Para Estabilidad Absoluta.-
         app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
