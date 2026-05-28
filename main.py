@@ -130,7 +130,9 @@ if SYSTEM_MODE != "production":
     print("⏰ Iniciando Scheduler de Reservas...")
 
 try:
-    scheduler = iniciar_scheduler(interval_seconds=30)
+    # Iniciar Scheduler - Intervalo Configurable desde .env ( TIEMPO_LIBERAR_RESERVAS_SEGUNDOS ).-
+    ...
+    scheduler = iniciar_scheduler()
 
     # ✅ Verificación de Seguridad y Confirmación de Jobs.-
     if scheduler:
