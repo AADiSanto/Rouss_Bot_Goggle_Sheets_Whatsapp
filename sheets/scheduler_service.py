@@ -572,14 +572,14 @@ def iniciar_scheduler(interval_seconds: int = None):
     # ── Configuración de Tiempos al Arrancar ──────────────────────────────────
     _es_desarrollo = os.getenv('FLASK_ENV', 'production').lower() == 'development'
     if _es_desarrollo or not getattr(iniciar_scheduler, '_config_logueada', False):
-        logger.info("=" * 55)
-        logger.info("⏱️  CONFIGURACIÓN DE TIEMPOS DEL SISTEMA:")
-        logger.info(f"   • TIEMPO_RESERVA_SEGUNDOS          : {RESERVA_SECONDS}s")
-        logger.info(f"   • TIEMPO_LIBERAR_RESERVAS_SEGUNDOS : {interval_seconds}s ({interval_seconds // 60} min)")
-        logger.info(f"   • TIEMPO_COLOREAR_FERIADOS_MINUTOS : {int(os.getenv('TIEMPO_COLOREAR_FERIADOS_MINUTOS', '60'))} min")
-        logger.info(f"   • LOGS_RESUMIDOS                   : {os.getenv('LOGS_RESUMIDOS', 'false').upper()}")
-        logger.info(f"   • LOGS_INTERVALO_HORAS             : {os.getenv('LOGS_INTERVALO_HORAS', '3')}h")
-        logger.info("=" * 55)
+        print("=" * 55)
+        print("⏱️  CONFIGURACIÓN DE TIEMPOS DEL SISTEMA:")
+        print(f"   • TIEMPO_RESERVA_SEGUNDOS          : {RESERVA_SECONDS}s")
+        print(f"   • TIEMPO_LIBERAR_RESERVAS_SEGUNDOS : {interval_seconds}s ({interval_seconds // 60} min)")
+        print(f"   • TIEMPO_COLOREAR_FERIADOS_MINUTOS : {int(os.getenv('TIEMPO_COLOREAR_FERIADOS_MINUTOS', '60'))} min")
+        print(f"   • LOGS_RESUMIDOS                   : {os.getenv('LOGS_RESUMIDOS', 'false').upper()}")
+        print(f"   • LOGS_INTERVALO_HORAS             : {os.getenv('LOGS_INTERVALO_HORAS', '3')}h")
+        print("=" * 55)
         iniciar_scheduler._config_logueada = True
     # ─────────────────────────────────────────────────────────────────────────
 
