@@ -602,32 +602,30 @@ def process_text_message(sender, text):
             return
         # ← ← ← FIN ANTI-DUPLICADOS ← ← ←
 
-        # ✅ NUEVA VALIDACIÓN: Verificar si el tiempo ya expiró antes de procesar cualquier texto
-        if 'timestamp_reserva' in state:
-            from datetime import datetime as dt_now
-            tiempo_transcurrido = (dt_now.now(tz) - state['timestamp_reserva']).total_seconds()
-
-            if tiempo_transcurrido > RESERVA_SECONDS:
-                try:
-                    from sheets.sheet_service import read_sheet, update_row
-                    data = read_sheet()
-                    for i, row in enumerate(data, start=2):
-                        if len(row) >= 13 and row[11] == state['reservation_id']:
-                            row[6] = 'Expirada'
-                            row[7] = 'FALSE'
-                            update_row(i, row)
-                            logger.info(f"Reserva {state['reservation_id']} Expirada Detectada en app.py")
-                            break
-                except Exception as e:
-                    logger.error(f"ERROR: al Marcar Reserva como Expirada: {e}")
-
-                send_message(sender,
-                             f"⚠️ ⏰ Lo Siento: {state['nombre']}, Tú Reserva del Turno, Expiró ( Pasó Más De 01 Minuto ),\n\n"
-                                          "Por Favor Comenzá de Nuevo Escribiendo 'Turno'...")
-
-                conversations[sender] = {'step': 0}
-
-                return
+        # ✅ VALIDACIÓN: Verificar Expiración Contra TimestampExpiración Real de Sheets ( Columna M ).-
+        if 'reservation_id' in state:
+            try:
+                from sheets.sheet_service import read_sheet, update_row
+                from datetime import datetime as dt_now
+                data = read_sheet()
+                for i, row in enumerate(data, start=2):
+                    if len(row) >= 13 and row[11] == state['reservation_id']:
+                        ts_expira_str = (row[12] or '').strip()
+                        if ts_expira_str:
+                            ts_expira = dt_now.fromisoformat(ts_expira_str)
+                            if obtener_ahora() > ts_expira:
+                                row[6] = 'Expirada'
+                                row[7] = 'FALSE'
+                                update_row(i, row)
+                                logger.info(f"Reserva {state['reservation_id']} Expirada Detectada en app.py")
+                                send_message(sender,
+                                             f"⚠️ ⏰ Lo Siento: {state['nombre']}, Tú Reserva del Turno, Expiró ( Pasó Más De 01 Minuto ),\n\n"
+                                                          "Por Favor Comenzá de Nuevo Escribiendo 'Turno'...")
+                                conversations[sender] = {'step': 0}
+                                return
+                        break
+            except Exception as e:
+                logger.error(f"ERROR: al Verificar Expiración de Reserva: {e}")
 
         # --- Procesar las palabras clave ---
         if 'confirmar' in text_lower:
