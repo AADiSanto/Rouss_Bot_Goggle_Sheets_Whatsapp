@@ -25,7 +25,7 @@ import logging
 import os
 
 from sheets.sheet_service import obtener_staff_negocio, obtener_staff_con_ids
-from sheets.utils import log_throttled
+from sheets.utils import log_throttled, obtener_ahora
 
 # --- Cargar Variables de Entorno ---
 NOMBRE_EMPRESA = os.getenv('Nombre_de_la_Empresa', 'Negocio') # 'Nombre del Negocio...'
@@ -606,6 +606,7 @@ def process_text_message(sender, text):
         if 'reservation_id' in state:
             try:
                 from sheets.sheet_service import read_sheet, update_row
+                from sheets.utils import obtener_ahora
                 from datetime import datetime as dt_now
                 data = read_sheet()
                 for i, row in enumerate(data, start=2):
