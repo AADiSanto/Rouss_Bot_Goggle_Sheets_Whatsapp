@@ -106,7 +106,7 @@ logging.getLogger('apscheduler.executors').setLevel(logging.WARNING)
 logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.WARNING)
 
 # Tiempo por Defecto para Expiración de Reserva ( en Segundos ).-
-RESERVA_SECONDS = 60  # ← Cambiar de 33 a 60 Segundos = 01 Minuto.-
+RESERVA_SECONDS = int(os.getenv('TIEMPO_RESERVA_SEGUNDOS', '60'))  # ← Configurable desde .env.-
 
 # Scheduler Singleton para Evitar Múltiples Instancias en el Mismo Proceso.-
 _SCHEDULER = None
@@ -227,6 +227,7 @@ def crear_reserva_provisional(nombre, telefono, servicio, coiffeur, fecha, hora,
     # Escritura en Google Sheets.-
     from sheets.sheet_service import append_row
     append_row(values)
+    ordenar_hoja()  # ← Reordena la Hoja al Grabar la Reserva Provisional.-
 
     return reservation_id
 
@@ -430,15 +431,11 @@ def confirmar_reserva(reservation_id):
 
 # Busca y Marca como Expiradas Las Reservas que Superaron el Tiempo Límite.-
 def liberar_reservas_expiradas():
-    """
-    Busca y Marca como Expiradas las Reservas que Superaron el Tiempo Límite.
-    Ejecutado Periódicamente Cada 01 Minuto por él scheduler.-
-    """
     # ---------------------------------------------------------------------------------
     # CONTROL DE LOGS ( RAILWAY ): 10800 Segundos = 03 Horas.-
     # ---------------------------------------------------------------------------------
     # Busca y Marca como Expiradas las Reservas que Superaron el Tiempo Límite.
-    # Ejecutado Periódicamente Cada 01 Minuto por él scheduler.-
+    # Ejecutado Periódicamente Según TIEMPO_LIBERAR_RESERVAS_SEGUNDOS del .env.-
 
     # LOG DE MONITOREO RUTINARIO ( MEMORY Ingeniería en Sistemas ).-
     # Muestra que el hilo sigue vivo sín Inundar el Log de Railway en MODO: production.-
@@ -457,13 +454,15 @@ def liberar_reservas_expiradas():
     try:
         from sheet_service import read_sheet, update_row, _invalidar_servicio_hilo
         from whatsapp_service import send_message
-        from app import conversations
         from googleapiclient.errors import HttpError
     except ImportError as e:
         logger.error(f"❌ ERROR de Referencia en Imports Locales: {e}")
         return
 
-    # El timeout ya está configurado en el cliente httplib2 dentro de sheet_service.
+    # Importación Unificada: Producción ( Railway ) y Desarrollo ( PyCharm + NGrok ).-
+    from bot.app import conversations
+
+    # El timeout Yá Está Configurado én él Cliente httplib2 Dentro dé sheet_service.-
     try:
         data = read_sheet()
     except (BrokenPipeError, ConnectionResetError, OSError) as e:
