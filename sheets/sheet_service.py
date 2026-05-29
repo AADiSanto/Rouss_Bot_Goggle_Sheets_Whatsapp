@@ -1300,6 +1300,18 @@ def get_available_slots(coiffeur, fecha):
                     fecha_normalizada == fecha and
                     row[6] in ['Confirmado', 'Pendiente']):  # Estado en Columna G ( índice  6 ) ✓
 
+                # Sí Está 'Pendiente', Verificar Sí Yá Expiró ( Columna M, índice 12 ).-
+                # Evita Bloquear Horarios de Reservas Expiradas Nó Limpiadas Aún por él Scheduler.-
+                if row[6] == 'Pendiente' and len(row) >= 13:
+                    ts_expira_str = (row[12] or '').strip()
+                    if ts_expira_str:
+                        try:
+                            ts_expira = datetime.fromisoformat(ts_expira_str)
+                            if obtener_ahora() > ts_expira:
+                                continue  # ← Expirada en Memoria, Nó Bloquea él Horario.-
+                        except Exception:
+                            pass  # ← Sí Nó sé Puede Parsear, Dejar como Ocupado por Seguridad.-
+
                 occupied_slots.add(row[5])  # Hora en Columna F (índice 5) ✓
 
     # Retornar Horarios Disponibles.-
