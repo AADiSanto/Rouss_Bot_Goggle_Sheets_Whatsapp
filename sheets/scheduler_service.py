@@ -496,12 +496,9 @@ def liberar_reservas_expiradas():
                     ts = datetime.fromisoformat(timestamp_str)
                     if ts.tzinfo is None:
                         ts = tz.localize(ts)
-
-                    # Calculamos el Punto Exacto de Expiración.-
-                    limite_expiracion = ts + timedelta(seconds=RESERVA_SECONDS)
-
-                    # COMPARACIÓN: Si el límite ( 01 Minuto ), yá pasó respecto a 'now'.-
-                    if now > limite_expiracion:
+                    # ts ( Columna M ) Yá és el Timestamp de Expiración Calculado al Crear la Reserva.-
+                    # COMPARACIÓN: Si el límite ( 01 Minuto ), Yá Pasó Respecto a 'now'.-
+                    if now > ts:
                         logger.info(f"⚠️ Marcando Reserva {row[11]} como EXPIRADA...")
 
                         # REVALIDACIÓN ANTES DE ACTUALIZAR (CRÍTICO).-
