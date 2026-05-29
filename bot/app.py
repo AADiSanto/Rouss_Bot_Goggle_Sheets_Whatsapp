@@ -282,6 +282,19 @@ def process_text_message(sender, text):
     # RESET GLOBAL: El Cliente Puede Empezar de Nuevo en Cualquier Momento.-
     # -----------------------------------------------------------------------
     if 'error' in text_lower:
+        # Sí Hay una Reserva Pendiente Activa, Cancelarla en Sheets Inmediatamente.-
+        if 'reservation_id' in state and state.get('confirmado') is not True:
+            try:
+                from sheets.sheet_service import read_sheet, update_row
+                data = read_sheet()
+                for i, row in enumerate(data, start=2):
+                    if len(row) >= 13 and row[11] == state['reservation_id'] and row[6] == 'Pendiente':
+                        row[6] = 'Cancelada'
+                        row[7] = 'FALSE'
+                        update_row(i, row)
+                        break
+            except Exception as e:
+                logger.error(f"ERROR: al Cancelar Reserva por 'Error': {e}")
         conversations[sender] = {'step': 0}
         send_message(sender,
                      "🔄 *Proceso Cancelado*. Cuando Quieras Empezar de Nuevo Escribí *'Turno'*...")
