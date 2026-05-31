@@ -452,12 +452,17 @@ def liberar_reservas_expiradas():
     # ya estén cargados en memoria al momento de la ejecución.-
     # ---------------------------------------------------------------------------------
     try:
-        from sheet_service import read_sheet, update_row, _invalidar_servicio_hilo
-        from whatsapp_service import send_message
+        from sheets.sheet_service import read_sheet, update_row, _invalidar_servicio_hilo
+        from bot.whatsapp_service import send_message
         from googleapiclient.errors import HttpError
-    except ImportError as e:
-        logger.error(f"❌ ERROR de Referencia en Imports Locales: {e}")
-        return
+    except ImportError:
+        try:
+            from sheet_service import read_sheet, update_row, _invalidar_servicio_hilo
+            from whatsapp_service import send_message
+            from googleapiclient.errors import HttpError
+        except ImportError as e:
+            logger.error(f"❌ ERROR de Referencia en Imports Locales: {e}")
+            return
 
     # Importación Unificada: Producción ( Railway ) y Desarrollo ( PyCharm + NGrok ).-
     from bot.app import conversations
