@@ -143,56 +143,25 @@ from google.oauth2 import service_account
 
 print("🔥 MODO CARGA CREDENCIALES")
 
-if os.getenv("RAILWAY_ENVIRONMENT"):
+GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON")
+
+# Un Solo Bloque: Railway usa Variable de Entorno, Local usa credentials.json.-
+if GOOGLE_CREDENTIALS_JSON:
     print("🔵 Usando Credenciales Desde VARIABLE DE ENTORNO ( Railway )...")
-
-    credentials_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
-
-    if not credentials_json:
-        raise RuntimeError("GOOGLE_CREDENTIALS_JSON Nó Encontrado en Railway...")
-
-    credentials_info = json.loads(credentials_json)
-
-    credentials = service_account.Credentials.from_service_account_info(
-        credentials_info
-    )
-
+    creds_data = json.loads(GOOGLE_CREDENTIALS_JSON)
 else:
     print("🟢 Usando credentials.json LOCAL")
-
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     cred_path = os.path.join(BASE_DIR, "credentials.json")
-
     print(f"📄 Ruta Buscada: {cred_path}")
-
     if not os.path.exists(cred_path):
         raise RuntimeError(f"Archivo credentials.json Nó Encontrado en: {cred_path}")
-
-    credentials = service_account.Credentials.from_service_account_file(
-        cred_path
-    )
-
-
-GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON")
-# Credenciales
-if GOOGLE_CREDENTIALS_JSON:
-    creds_dict = json.loads(GOOGLE_CREDENTIALS_JSON)
-    creds = service_account.Credentials.from_service_account_info(
-        creds_dict, scopes=SCOPES
-    )
-    creds_data = creds_dict
-
-else:
-    if not SERVICE_ACCOUNT_FILE.exists():
-        logger.error(f"❌ ERROR: Nó Hay Credenciales Ní Variable en RailWay Ní Archivo Local: {SERVICE_ACCOUNT_FILE}")
-        raise RuntimeError("Credenciales de Google Nó Configuradas Correctamente...")
-
-    with open(SERVICE_ACCOUNT_FILE, 'r') as f:
+    with open(cred_path, 'r') as f:
         creds_data = json.load(f)
 
-    creds = service_account.Credentials.from_service_account_file(
-        str(SERVICE_ACCOUNT_FILE), scopes=SCOPES
-    )
+creds = service_account.Credentials.from_service_account_info(
+    creds_data, scopes=SCOPES
+)
 
 # Email del Service Account.-
 service_account_email = creds_data.get('client_email')
@@ -200,7 +169,6 @@ service_account_email = creds_data.get('client_email')
 if not service_account_email:
     logger.warning("⚠️ ERROR: Nó Sé Pudo Obtener él EMaiL del Service Account")
 
-#Debug para RailWay.-
 print("✅ Credenciales EMaiL del Service Account, Cargadas Correctamente")
 
 import httplib2
@@ -223,27 +191,38 @@ _thread_local = threading.local()
 _api_lock = threading.Lock()
 
 # ------------------------------------------------------------------------------
-# Construye un Cliente Google Sheets Exclusivo para Cada Hilo.-
-# Evita la Condición de Carrera SSL entre Flask y APScheduler.-
-# httplib2.Http() NO es Thread-Safe — un Singleton Compartido Corrompe la
-# Capa SSL cuando dos Hilos lo Usan Simultáneamente ( [SSL] record layer failure ).-
+# Singleton Global — Un Solo Cliente Google Sheets para Todo el Proceso.-
+# Evita Crear un Cliente Nuevo por Cada Hilo ( Leak de Memoria en Railway ).-
+# La Condición de Carrera SSL se Resuelve con _api_lock ( ya existente ),
+# que Serializa Todas las Llamadas a Google API — No se Necesita un Http
+# por Hilo porque Nunca hay Dos Llamadas Simultáneas al Mismo Tiempo.-
 # ------------------------------------------------------------------------------
+_SERVICE_SINGLETON = None
+
 def _build_service():
     """
-    Retorna un Cliente de Google Sheets Exclusivo para Cada Hilo.-
-    Si el Hilo Nó Tiene Uno, lo Crea con su Propio httplib2.Http().-
+    Retorna el Cliente Google Sheets Singleton del Proceso.-
+    Un Solo Cliente para Todos los Hilos — Protegido por _api_lock.-
     Si Ocurre un Error SSL, sé Limpia para Forzar Reconexión en el Próximo Llamado.-
     """
-    if not hasattr(_thread_local, 'service') or _thread_local.service is None:
-        _http_local = httplib2.Http(timeout=30)
-        _auth_local  = google_auth_httplib2.AuthorizedHttp(creds, http=_http_local)
-        _thread_local.service = build('sheets', 'v4', http=_auth_local)
-    return _thread_local.service
+    global _SERVICE_SINGLETON
+    if _SERVICE_SINGLETON is None:
+        with _api_lock:
+            if _SERVICE_SINGLETON is None:
+                _http_local = httplib2.Http(timeout=30)
+                _auth_local = google_auth_httplib2.AuthorizedHttp(creds, http=_http_local)
+                _SERVICE_SINGLETON = build(
+                    'sheets', 'v4',
+                    http=_auth_local,
+                    cache_discovery=False   # ← Evita Cachear el Discovery Doc en Memoria.-
+                )
+    return _SERVICE_SINGLETON
 
 
 def _invalidar_servicio_hilo():
     """Fuerza Reconexión en el Próximo Llamado a _build_service().-"""
-    _thread_local.service = None
+    global _SERVICE_SINGLETON
+    _SERVICE_SINGLETON = None
 
 
 # Generar el Nombre de la Hoja de Cálculo para un Año Específico.-
