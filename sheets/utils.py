@@ -90,9 +90,9 @@ LOGS_INTERVALO_HORAS = int(os.getenv('LOGS_INTERVALO_HORAS', '3'))
 
 def log_throttled(nivel: str, mensaje: str, logger_ref=None):
     """
-    Emite un Log Respetando el Flag LOGS_CADA_HORA del .env.-
-        - Si LOGS_CADA_HORA=false : Siempre Muestra el Log.-
-        - Si LOGS_CADA_HORA=true  : Muestra el Log Solo 1 Vez por Cada 03 Horas ( Errores Siempre Salen ).-
+    Emite un Log Respetando el Flag LOGS_RESUMIDOS del .env.-
+        - Si LOGS_RESUMIDOS=false : Siempre Muestra el Log.-
+        - Si LOGS_RESUMIDOS=true  : Muestra el Log Solo 1 Vez Cada LOGS_INTERVALO_HORAS Horas ( Errores Siempre Salen ).
 
     Args:
         nivel     : 'info' | 'warning' | 'error' | 'debug'
@@ -111,10 +111,18 @@ def log_throttled(nivel: str, mensaje: str, logger_ref=None):
     ahora = datetime.now(tz)
     ultima = _ultimo_log.get(mensaje)
 
-     # Tiempo en Horas en LOGS_INTERVALO_HORAS para Mostrar los Log's.-
+    # Tiempo en Horas en LOGS_INTERVALO_HORAS para Mostrar los Log's.-
     if ultima is None or (ahora - ultima) >= timedelta(hours=LOGS_INTERVALO_HORAS):
         _ultimo_log[mensaje] = ahora
         _emitir_log(nivel, mensaje, logger_ref)
+
+    # Limpieza Periódica del Diccionario para Evitar Leak de Memoria.-
+    # Elimina Entradas Más Viejas que 2x el Intervalo Configurado.-
+    if len(_ultimo_log) > 500:
+        cutoff = ahora - timedelta(hours=LOGS_INTERVALO_HORAS * 2)
+        claves_viejas = [k for k, v in _ultimo_log.items() if v < cutoff]
+        for k in claves_viejas:
+            del _ultimo_log[k]
 
 
 def _emitir_log(nivel: str, mensaje: str, logger_ref=None):
