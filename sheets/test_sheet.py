@@ -36,8 +36,17 @@ test_sheet.py
 Testear Lectura de la Planilla de Excel.-
 """
 
+import sys
+import os
+
+# Agregar El Directorio Raíz al Path.-
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from sheets.sheet_service import read_sheet
 data = read_sheet()  # La Función sé Ejecuta Aquí.-
-print(data)          # El Resultado De ésta Función Sé Imprime Aquí.-
+print(data)          # El Resultado dé ésta Función Sé Imprime Aquí.-
+
+
 
 
