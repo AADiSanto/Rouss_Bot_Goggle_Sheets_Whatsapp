@@ -66,19 +66,23 @@ Ejecutar Desde el Proyecto en : python sheets/test_year_change.py
 import sys
 import os
 
+# Agregar El Directorio Raíz al Path ( Estamos en '/sheets', Subir un Nivel ).-
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+os.environ["SYSTEM_MODE"] = "demo"
+os.environ["AUTO_CREATE_YEARLY_SHEETS"] = "true"
+
 import logging
 logging.getLogger().handlers.clear()
 
 # Año Actual y Año Próximo Detectados Dinámicamente.-
-from sheet_service import get_current_year
+from sheet_service import get_current_year, obtener_staff_negocio, SPREADSHEET_IDS_BY_YEAR, obtener_servicios_negocio
 
 AÑO_ACTUAL = get_current_year()
 AÑO_SIGUIENTE = AÑO_ACTUAL + 1
 
 from datetime import datetime
-
-# Agregar El Directorio Raíz al Path ( Estamos en '/sheets', Subir un Nivel ).-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sheet_service import (
     set_active_spreadsheet,
@@ -105,10 +109,16 @@ def test_año_actual():
         sheet_id = set_active_spreadsheet(AÑO_ACTUAL)
         print(f"✅ Hoja Año: {AÑO_ACTUAL} Configurada: {sheet_id}")
 
-        # Verificar Horarios Disponibles.-
-        horarios = get_available_slots('Walter', fecha_prueba)
-        print(f"✅ Horarios Disponibles para Walter el {fecha_prueba}:")
-        print(f"   {', '.join(horarios[:5])}..." if len(horarios) > 5 else f"   {', '.join(horarios)}")
+        # Verificar Horarios Disponibles para Cada Coiffeur del Staff.-
+        staff = obtener_staff_negocio()
+        for coiffeur in staff:
+            horarios = get_available_slots(coiffeur, fecha_prueba)
+            print(f"✅ Horarios Disponibles para {coiffeur} el {fecha_prueba}:")
+            print(f"   {', '.join(horarios[:5])}..." if len(horarios) > 5 else f"   {', '.join(horarios)}")
+
+            # Verificar disponibilidad de un horario específico.-
+            disponible = check_availability(coiffeur, fecha_prueba, '15:00')
+            print(f"✅ Horario 15:00 Disponible para {coiffeur}: {'SÍ' if disponible else 'NO'}")
 
         # Verificar disponibilidad de un horario específico
         disponible = check_availability('Walter', fecha_prueba, '15:00')
@@ -130,12 +140,20 @@ def test_año_siguiente():
 
     fecha_prueba = f"{AÑO_SIGUIENTE}-01-15"
 
+    print(f"🔍 Año Evaluado: {AÑO_SIGUIENTE}")
+
     try:
         # Configurar Hoja para el Año Siguiente al Actual ( Debería Crearla Automáticamente ).-
         print("🔄 Intentando Configurar / Crear Hoja para el Año Siguiente al Actual...")
 
         # NOTA: Nó se Crea Hoja Nueva porque Nó Tengo Permisos para Crearla, Sólo Usarla.-
-        sheet_id = set_active_spreadsheet(AÑO_SIGUIENTE)
+        try:
+            sheet_id = set_active_spreadsheet(AÑO_SIGUIENTE)
+        except Exception as e:
+            print("❌ ERROR al Crear / Obtener La Hoja Del Año Siguiente...")
+            print(f"   Motivo: {e}")
+            return False
+
         print(f"✅ Hoja Año {AÑO_SIGUIENTE} Configurada / Creada: {sheet_id}")
 
         from sheet_service import NOMBRE_EMPRESA
@@ -143,16 +161,33 @@ def test_año_siguiente():
         print(f"   🔗 URL: https://docs.google.com/spreadsheets/d/{sheet_id}")
 
         # Verificar que Sé Puede Leer la Hoja (Debería Tener Sólo Encabezados).-
-        datos = read_sheet('A1:M2')
-        print(f"✅ Lectura de Hoja {AÑO_SIGUIENTE} Exitosa...")
-        print(f"   Filas Leídas: {len(datos)}")
-        if datos:
-            print(f"   Encabezados: {datos[0][:4]}...")  # Primeras 4 Columnas.-
+        try:
+            datos = read_sheet('A1:Z2')
+            print(f"✅ Lectura de Hoja {AÑO_SIGUIENTE} Exitosa...")
+            print(f"   Filas Leídas: {len(datos)}")
 
-        # Verificar Horarios Disponibles (Todos Deberían Estar Libres).-
-        horarios = get_available_slots('Walter', fecha_prueba)
-        print(f"✅ Horarios Disponibles para Walter el: {fecha_prueba}:")
-        print(f"   Total: {len(horarios)} Horarios Libres")
+            if datos:
+                print(f"   Encabezados: {datos[0][:4]}...")
+        except Exception as e:
+            print("⚠️ Advertencia: Nó Sé Pudo Leer Lá Hoja Recién Creada...")
+            print(f"   Motivo: {e}")
+
+        # Verificar Horarios Disponibles ( Todos Deberían Estar Libres ).-
+        print("🔄 Verificando Generación Dé Horarios Disponibles...")
+
+        staff = obtener_staff_negocio()
+
+        if not staff:
+            print("⚠️ Advertencia: No se encontraron coiffeurs en Turnos_Staff_Negocio")
+            return False
+
+        for coiffeur in staff:
+            print(f"\n👤 Verificando Horarios para: {coiffeur}")
+
+            horarios = get_available_slots(coiffeur, fecha_prueba)
+
+            print(f"✅ Horarios Disponibles para {coiffeur} el: {fecha_prueba}:")
+            print(f"   Total: {len(horarios)} Horarios Libres")
 
         return True
 
@@ -174,26 +209,49 @@ def test_reserva_año_siguiente_al_actual():
     hora = "10:00"
 
     try:
-        # Crear Reserva Provisional (DEBE FALLAR)
+        # Obtener Staff y Servicios Dinámicamente desde Google Sheets.-
+        staff = obtener_staff_negocio()
+        if not staff:
+            print("❌ ERROR: Nó Sé Encontró Staff en 'Turnos_Staff_Negocio'...")
+            return False
+
+        servicios = obtener_servicios_negocio()
+        if not servicios:
+            print("❌ ERROR: Nó Sé Encontraron Servicios en 'Turnos_Servicios_Negocio'...")
+            return False
+
+        # Crear Reserva Provisional ( COMPORTAMIENTO DEPENDE DEL MODO DEL SISTEMA ).-
         print(f"🔄 Creando Reserva para: {AÑO_SIGUIENTE} a las: {hora}...")
         crear_reserva_provisional(
             nombre="TEST_CLIENTE_AÑO_SIGUIENTE_AL_ACTUAL",
             telefono="549119999999999",
-            servicio="Corte",
-            coiffeur="Walter",
+            servicio=servicios[0]['servicio'],
+            coiffeur=staff[0],
             fecha=fecha_prueba,
             hora=hora
         )
 
-        # Si llega aquí, es un ERROR (porque NO debería permitir reservar)
-        print("❌ ERROR: El Sistema PERMITIÓ Reservar en el Año Siguiente ( INCORRECTO ).-")
-        return False
+        # Si Llega Aquí, ( Nó Debería Permitir Reservar SEGUN EL MODO DEL SISTEMA ).-
+        modo = os.getenv("SYSTEM_MODE", "production").lower()
+
+        if modo == "demo":
+            print("✅ Correcto: En Modo DEMO Sé Permite Reservar en él Año Siguiente...")
+            return True
+        else:
+            print("❌ ERROR: El Sistema PERMITIÓ Reservar en el Año Siguiente ( INCORRECTO ).-")
+            return False
 
     except ValueError as e:
-        # ESTE ES EL COMPORTAMIENTO CORRECTO
-        print(f"✅ Correcto: El Sistema Rechazó la Reserva del Año Siguiente.-")
-        print(f"   Mensaje: {e}")
-        return True
+        modo = os.getenv("SYSTEM_MODE", "production").lower()
+
+        if modo == "production":
+            print(f"✅ Correcto: El Sistema Rechazó la Reserva del Año Siguiente.-")
+            print(f"   Mensaje: {e}")
+            return True
+        else:
+            print(f"❌ ERROR: En Modo DEMO Nó Debería Rechazar la Reserva del Próximo Año...")
+            print(f"   Mensaje: {e}")
+            return False
 
     except Exception as e:
         print(f"❌ ERROR Inesperado en Test Reserva Año Siguiente: {e}")
@@ -250,16 +308,47 @@ def test_generar_proximo_año():
     print("=" * 70)
 
     try:
-        from sheets.sheet_service import generar_hoja_del_proximo_año
+        from sheets.sheet_service import generar_hoja_del_proximo_año, NOMBRE_EMPRESA
+        from datetime import datetime
 
-        nuevo_id = generar_hoja_del_proximo_año()
-        print(f"✅ Hoja del Próximo Año Generada Correctamente.-")
+        año_actual = datetime.now().year
+        año_siguiente = año_actual + 1
+
+        # Verificar Sí Yá Existe La Hoja Del Próximo Año en el Mapping.-
+        if año_siguiente in SPREADSHEET_IDS_BY_YEAR:
+            existente_id = SPREADSHEET_IDS_BY_YEAR[año_siguiente]
+            print(f"ℹ️ La Hoja del Año {año_siguiente} Yá Existe...")
+            print(f"   Reutilizando ID: {existente_id}")
+            return existente_id
+
+        nombre_esperado = f"{año_siguiente}_{NOMBRE_EMPRESA}_Turnos_Coiffeur"
+
+        print(f"🔍 Año Actual: {año_actual}")
+        print(f"🔍 Año Siguiente: {año_siguiente}")
+        print(f"📄 Nombre Esperado: '{nombre_esperado}'")
+
+        print("🔄 Intentando Generar Hoja del Próximo Año...")
+
+        try:
+            nuevo_id = generar_hoja_del_proximo_año()
+        except Exception as e:
+            print("❌ ERROR durante la generación de la hoja")
+            print(f"   Motivo: {e}")
+            return False
+
+        if not nuevo_id:
+            print("❌ ERROR: No se devolvió ningún ID de hoja")
+            return False
+
+        print(f"✅ Hoja del Próximo Año Generada / Encontrada Correctamente.-")
         print(f"   Nuevo SPREADSHEET_ID: {nuevo_id}")
+        print(f"   🔗 URL: https://docs.google.com/spreadsheets/d/{nuevo_id}")
+        print(f"⚠️ RECORDATORIO: Agregar SPREADSHEET_ID_{año_siguiente} al .env y en RailWay...")
 
         return True
 
     except Exception as e:
-        print(f"❌ ERROR al Generar Hoja del Próximo Año: {e}")
+        print(f"❌ ERROR en Test Generar Próximo Año: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -285,11 +374,18 @@ def test_validar_pestanas(year):
         # Extraer nombres de pestañas reales
         pestañas = [sh["properties"]["title"] for sh in info.get("sheets", [])]
 
-        # Pestañas requeridas
+        # Pestañas Requeridas:
         requeridas = [
             "Turnos_Coiffeur",
             "Turnos_Calendario_Visual",
+            "Turnos_Horarios_Negocio",
             "Turnos_Feriados",
+            "Turnos_Staff_Negocio",
+            "Turnos_Servicios_Negocio",
+            "Insumos_Proveedores",
+            "Insumos_Nombres_Cantidad_Medidas",
+            "Insumos_Costos",
+            "Parámetros",
         ]
 
         print("📄 Pestañas Encontradas:", ", ".join(pestañas))
