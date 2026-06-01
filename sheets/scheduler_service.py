@@ -505,14 +505,32 @@ def liberar_reservas_expiradas():
                     if now > ts:
                         logger.info(f"⚠️ Marcando Reserva {row[11]} como EXPIRADA...")
 
-                        # REVALIDACIÓN ANTES DE ACTUALIZAR (CRÍTICO).-
+                        # REVALIDACIÓN ANTES DE ACTUALIZAR ( CRÍTICO ).-
+                        # Timeout Explícito: Sí Google Sheets Nó Responde en 20s, Saltamos la Fila.-
                         try:
-                            data_actualizada = read_sheet()
-                            fila_actual = data_actualizada[i - 2]
-                            if len(fila_actual) >= 8:
-                                if fila_actual[6] not in ['Pendiente', 'Provisional'] or (fila_actual[7] or '').upper() != 'TRUE':
-                                    continue
-                        except:
+                            import signal
+
+                            def _timeout_handler(signum, frame):
+                                raise TimeoutError("Revalidación Google Sheets: Timeout 20s")
+
+                            signal.signal(signal.SIGALRM, _timeout_handler)
+                            signal.alarm(20)
+
+                            try:
+                                data_actualizada = read_sheet()
+                                fila_actual = data_actualizada[i - 2]
+                                if len(fila_actual) >= 8:
+                                    if fila_actual[6] not in ['Pendiente', 'Provisional'] or (
+                                            fila_actual[7] or '').upper() != 'TRUE':
+                                        signal.alarm(0)
+                                        continue
+                            finally:
+                                signal.alarm(0)  # ← Cancelar Alarma Sí Todo Salió Bien.-
+
+                        except TimeoutError as e_timeout:
+                            logger.error(f"⏱️ TIMEOUT Revalidación Fila {i}: {e_timeout} — Sé Omite.-")
+                            continue
+                        except Exception:
                             continue
 
                         # Datos para la Notificación.-
