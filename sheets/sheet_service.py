@@ -175,10 +175,10 @@ import httplib2
 import google_auth_httplib2
 
 # Http con Timeout para Evitar Cuelgues SSL en Railway / Python 3.13.-
-_http = httplib2.Http(timeout=15)
+_http = httplib2.Http(timeout=30)
 _authorized_http = google_auth_httplib2.AuthorizedHttp(creds, http=_http)
 
-# Cliente Sheets — Sin cache_discovery para Evitar Llamada HTTP al Importar.-
+# Cliente Sheets con Transport Controlado ( Timeout SSL para Railway / Python 3.13 ).-
 service = build('sheets', 'v4', http=_authorized_http)
 sheets = service.spreadsheets()
 
@@ -997,17 +997,8 @@ def puede_crear_hoja(year):
 def _get_sheet_titles(spreadsheet_id):
     """Devuelve la Lista de Títulos ( tabs ) del Spreadsheet."""
     try:
-        acquired = _api_lock.acquire(timeout=20)
-        if not acquired:
-            logger.error("(get_sheet_titles) TIMEOUT: Nó sé Pudo Adquirir _api_lock en 20 Segundos.-")
-            raise RuntimeError("TIMEOUT al Intentar Obtener Títulos del Spreadsheet.-")
-        try:
-            meta = _build_service().spreadsheets().get(
-                spreadsheetId=spreadsheet_id,
-                includeGridData=False
-            ).execute()
-        finally:
-            _api_lock.release()
+        meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id,
+                                          includeGridData=False).execute()
     except HttpError as e:
         raise RuntimeError(f"ERROR: Nó Fué Posible Obtener Metadatos del Spreadsheet: {e}") from e
 
