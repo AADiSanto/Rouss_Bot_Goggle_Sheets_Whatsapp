@@ -175,11 +175,11 @@ import httplib2
 import google_auth_httplib2
 
 # Http con Timeout para Evitar Cuelgues SSL en Railway / Python 3.13.-
-_http = httplib2.Http(timeout=15)  # ← Reducido a 15s para detectar cuelgues rápido.-
+_http = httplib2.Http(timeout=15)
 _authorized_http = google_auth_httplib2.AuthorizedHttp(creds, http=_http)
 
-# Cliente Sheets con Transport Controlado ( Timeout SSL para Railway / Python 3.13 ).-
-service = build('sheets', 'v4', http=_authorized_http, cache_discovery=False)
+# Cliente Sheets — Sin cache_discovery para Evitar Llamada HTTP al Importar.-
+service = build('sheets', 'v4', http=_authorized_http)
 sheets = service.spreadsheets()
 
 import threading
