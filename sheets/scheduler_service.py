@@ -432,6 +432,17 @@ def confirmar_reserva(reservation_id):
 # Busca y Marca como Expiradas Las Reservas que Superaron el Tiempo Límite.-
 def liberar_reservas_expiradas():
     # ---------------------------------------------------------------------------------
+    # WRAPPER GLOBAL: Garantiza que el Job SIEMPRE Termine — Nunca Quede Colgado.-
+    # Sin Esto, un Error 503 de Google deja el Job Bloqueado para Siempre en APScheduler.-
+    # ---------------------------------------------------------------------------------
+    try:
+        _liberar_reservas_expiradas_impl()
+    except Exception as e:
+        logger.error(f"❌ ERROR CRÍTICO en liberar_reservas_expiradas: {type(e).__name__}: {e}")
+
+
+def _liberar_reservas_expiradas_impl():
+    # ---------------------------------------------------------------------------------
     # CONTROL DE LOGS ( RAILWAY ): 10800 Segundos = 03 Horas.-
     # ---------------------------------------------------------------------------------
     # Busca y Marca como Expiradas las Reservas que Superaron el Tiempo Límite.
