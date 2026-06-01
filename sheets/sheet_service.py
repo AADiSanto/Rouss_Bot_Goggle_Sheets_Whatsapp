@@ -175,11 +175,11 @@ import httplib2
 import google_auth_httplib2
 
 # Http con Timeout para Evitar Cuelgues SSL en Railway / Python 3.13.-
-_http = httplib2.Http(timeout=30)
+_http = httplib2.Http(timeout=15)  # ← Reducido a 15s para detectar cuelgues rápido.-
 _authorized_http = google_auth_httplib2.AuthorizedHttp(creds, http=_http)
 
 # Cliente Sheets con Transport Controlado ( Timeout SSL para Railway / Python 3.13 ).-
-service = build('sheets', 'v4', http=_authorized_http)
+service = build('sheets', 'v4', http=_authorized_http, cache_discovery=False)
 sheets = service.spreadsheets()
 
 import threading
@@ -997,8 +997,17 @@ def puede_crear_hoja(year):
 def _get_sheet_titles(spreadsheet_id):
     """Devuelve la Lista de Títulos ( tabs ) del Spreadsheet."""
     try:
-        meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id,
-                                          includeGridData=False).execute()
+        acquired = _api_lock.acquire(timeout=20)
+        if not acquired:
+            logger.error("(get_sheet_titles) TIMEOUT: Nó sé Pudo Adquirir _api_lock en 20 Segundos.-")
+            raise RuntimeError("TIMEOUT al Intentar Obtener Títulos del Spreadsheet.-")
+        try:
+            meta = _build_service().spreadsheets().get(
+                spreadsheetId=spreadsheet_id,
+                includeGridData=False
+            ).execute()
+        finally:
+            _api_lock.release()
     except HttpError as e:
         raise RuntimeError(f"ERROR: Nó Fué Posible Obtener Metadatos del Spreadsheet: {e}") from e
 
@@ -1073,13 +1082,27 @@ def read_sheet(range_a1=None):
         range_a1 = 'A2:N1000'  # ← Lee las 13 Columnas Reales, Incluír Columna N FechaISO para Ordenar Fechas.-.-
 
     full_range = _safe_range(SHEET_NAME, range_a1)  # ← MANTENER ESTA INDENTACIÓN.-
+
     for intento in range(2):
         try:
-            with _api_lock:
+            # Timeout Explícito de 45s — Evita que _api_lock Quede Bloqueado
+            # si Google Sheets Nó Responde ( Causa Principal del Job Colgado ).-
+            acquired = _api_lock.acquire(timeout=45)
+            if not acquired:
+                logger.error(f"(read_sheet) TIMEOUT: Nó sé Pudo Adquirir _api_lock en 45s — Intento {intento + 1}")
+                if intento == 1:
+                    return []
+                time.sleep(2)
+                continue
+
+            try:
                 result = _build_service().spreadsheets().values().get(
                     spreadsheetId=SPREADSHEET_ID,
                     range=full_range
                 ).execute()
+            finally:
+                _api_lock.release()  # ← SIEMPRE Liberar, aunque execute() Falle.-
+
             return result.get('values', [])
 
         except HttpError as e:
