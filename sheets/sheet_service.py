@@ -171,31 +171,18 @@ if not service_account_email:
 
 print("✅ Credenciales EMaiL del Service Account, Cargadas Correctamente")
 
-import httplib2
-import google_auth_httplib2
-
-# Http con Timeout para Evitar Cuelgues SSL en Railway / Python 3.13.-
-_http = httplib2.Http(timeout=30)
-_authorized_http = google_auth_httplib2.AuthorizedHttp(creds, http=_http)
-
-# Cliente Sheets con Transport Controlado ( Timeout SSL para Railway / Python 3.13 ).-
-service = build('sheets', 'v4', http=_authorized_http)
-sheets = service.spreadsheets()
-
 import threading
-# Storage por Hilo — Cada Hilo Flask / APScheduler Tiene su Propio Cliente SSL.-
-_thread_local = threading.local()
+import requests
+from google.auth.transport.requests import Request as GoogleRequest
 
 # Lock Global — Serializa Llamadas a Google API.-
-# Previene Segmentation Fault SSL en Python 3.13 con httplib2 Multi-Hilo.-
+# Previene Condición de Carrera entre Flask y APScheduler.-
 _api_lock = threading.Lock()
 
 # ------------------------------------------------------------------------------
 # Singleton Global — Un Solo Cliente Google Sheets para Todo el Proceso.-
-# Evita Crear un Cliente Nuevo por Cada Hilo ( Leak de Memoria en Railway ).-
-# La Condición de Carrera SSL se Resuelve con _api_lock ( ya existente ),
-# que Serializa Todas las Llamadas a Google API — No se Necesita un Http
-# por Hilo porque Nunca hay Dos Llamadas Simultáneas al Mismo Tiempo.-
+# Usa google-auth-requests en lugar de httplib2 — Timeout Real Garantizado.-
+# Evita el Bug de httplib2 donde el Timeout SSL Nó Sé Aplica en Railway.-
 # ------------------------------------------------------------------------------
 _SERVICE_SINGLETON = None
 
@@ -203,17 +190,23 @@ def _build_service():
     """
     Retorna el Cliente Google Sheets Singleton del Proceso.-
     Un Solo Cliente para Todos los Hilos — Protegido por _api_lock.-
-    Si Ocurre un Error SSL, sé Limpia para Forzar Reconexión en el Próximo Llamado.-
+    Timeout de 30s Real — Garantizado por google-auth-requests.-
+    Si Ocurre un Error, sé Limpia para Forzar Reconexión en el Próximo Llamado.-
     """
     global _SERVICE_SINGLETON
     if _SERVICE_SINGLETON is None:
         with _api_lock:
             if _SERVICE_SINGLETON is None:
-                _http_local = httplib2.Http(timeout=30)
-                _auth_local = google_auth_httplib2.AuthorizedHttp(creds, http=_http_local)
+                # Session con Timeout Real — Reemplaza httplib2 que Nó Respeta Timeouts SSL.-
+                _session = requests.Session()
+                _session.request = lambda method, url, **kwargs: \
+                    requests.Session.request(_session, method, url, timeout=30, **kwargs)
+                _auth_transport = GoogleRequest(session=_session)
+                # Refrescar Credenciales con el Nuevo Transport.-
+                creds.refresh(_auth_transport)
                 _SERVICE_SINGLETON = build(
                     'sheets', 'v4',
-                    http=_auth_local,
+                    credentials=creds,
                     cache_discovery=False   # ← Evita Cachear el Discovery Doc en Memoria.-
                 )
     return _SERVICE_SINGLETON
