@@ -476,7 +476,14 @@ def _liberar_reservas_expiradas_impl():
             return
 
     # Importación Unificada: Producción ( Railway ) y Desarrollo ( PyCharm + NGrok ).-
-    from bot.app import conversations
+    try:
+        from bot.app import conversations
+    except Exception:
+        try:
+            from app import conversations
+        except Exception as e:
+            logger.error(f"❌ ERROR al Importar conversations: {e}")
+            return
 
     # El timeout Yá Está Configurado én él Cliente httplib2 Dentro dé sheet_service.-
     try:
