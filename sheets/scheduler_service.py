@@ -486,8 +486,13 @@ def _liberar_reservas_expiradas_impl():
             return
 
     # El timeout Yá Está Configurado én él Cliente httplib2 Dentro dé sheet_service.-
+    logger.error(f"🔍 DEBUG: Antes de read_sheet()...")
+
     try:
         data = read_sheet()
+
+        logger.error(f"🔍 DEBUG: read_sheet() retornó: {len(data)} filas")
+
     except (BrokenPipeError, ConnectionResetError, OSError) as e:
         _invalidar_servicio_hilo()
         time.sleep(1)
