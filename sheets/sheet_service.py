@@ -198,9 +198,12 @@ def _build_service():
         with _api_lock:
             if _SERVICE_SINGLETON is None:
                 # Session con Timeout Real — Reemplaza httplib2 que Nó Respeta Timeouts SSL.-
+                # timeout se pasa Solo Sí Nó Viene Yá en kwargs para Evitar Duplicado.-
                 _session = requests.Session()
                 _session.request = lambda method, url, **kwargs: \
-                    requests.Session.request(_session, method, url, timeout=30, **kwargs)
+                    requests.Session.request(_session, method, url,
+                                             **{**{'timeout': 30}, **kwargs})
+
                 _auth_transport = GoogleRequest(session=_session)
                 # Refrescar Credenciales con el Nuevo Transport.-
                 creds.refresh(_auth_transport)
@@ -986,12 +989,11 @@ def puede_crear_hoja(year):
     return False
 
 
-# --- Verificación de la Existencia de la Hoja en el Spreadsheet.-
 def _get_sheet_titles(spreadsheet_id):
     """Devuelve la Lista de Títulos ( tabs ) del Spreadsheet."""
     try:
-        meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id,
-                                          includeGridData=False).execute()
+        meta = _build_service().spreadsheets().get(spreadsheetId=spreadsheet_id,
+                                                   includeGridData=False).execute()
     except HttpError as e:
         raise RuntimeError(f"ERROR: Nó Fué Posible Obtener Metadatos del Spreadsheet: {e}") from e
 
