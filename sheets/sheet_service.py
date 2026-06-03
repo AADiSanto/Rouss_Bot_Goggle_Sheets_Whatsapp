@@ -367,7 +367,7 @@ def aplicar_formatos_hoja(service, spreadsheet_id, sheet_title):
         de la Pestaña indicada. NO se llama recursivamente.
         """
     # Obtener sheetId numérico
-    sheets_info = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheets_info = _build_service().spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
     sheet_id = None
 
     for sh in sheets_info.get("sheets", []):
@@ -448,7 +448,7 @@ def aplicar_formatos_hoja(service, spreadsheet_id, sheet_title):
     # Ejecutar los Formatos Solicitados.-
     # -----------------------------------------------------------------
     if requests:
-        service.spreadsheets().batchUpdate(
+        _build_service().spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet_id,
             body={"requests": requests}
         ).execute()
@@ -612,10 +612,11 @@ def get_or_create_spreadsheet_for_year(year):
                 if year in SPREADSHEET_IDS_BY_YEAR:
                     sheet_id = SPREADSHEET_IDS_BY_YEAR[year]
                     try:
-                        # Intentar acceder a la hoja para verificar que existe
-                        service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+                        # Intentar Acceder a Lá Hoja para Verificar Qué Existe.-
+                        _build_service().spreadsheets().get(spreadsheetId=sheet_id).execute()
                         logger.info(f"📊 Usando Hoja Existente para el Año {year}: {sheet_id}")
                         return sheet_id
+
                     except HttpError as e:
                         # La hoja Nó Existe, Eliminar del caché y Continuar para Crearla.-
                         logger.warning(f"⚠️ Hoja del Año {year} con ID {sheet_id} Nó existe. Se Creará Una Nueva...")
@@ -633,8 +634,8 @@ def get_or_create_spreadsheet_for_year(year):
         if year in SPREADSHEET_IDS_BY_YEAR:
             sheet_id = SPREADSHEET_IDS_BY_YEAR[year]
             try:
-                # Intentar acceder a la hoja para verificar que existe
-                service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+                # Intentar Acceder a Lá Hoja Para Verificar Qué Existe.-
+                _build_service().spreadsheets().get(spreadsheetId=sheet_id).execute()
                 logger.info(f"📊 Usando Hoja Existente para el Año {year}: {sheet_id}")
                 return sheet_id
             except HttpError as e:
@@ -705,10 +706,11 @@ def get_or_create_spreadsheet_for_year(year):
         ]
         for tab in tabs_to_clear:
             try:
-                service.spreadsheets().values().clear(
+                _build_service().spreadsheets().values().clear(
                     spreadsheetId=new_id,
                     range=f"'{tab}'!A2:Z10000"
                 ).execute()
+
                 logger.info(f"🧹 Datos Limpiados en Pestaña: '{tab}'")
             except Exception as e:
                 logger.warning(f"⚠️ Nó sé Pudieron Limpiar Datos de '{tab}': {e}")
@@ -891,12 +893,14 @@ def inicializar_encabezados(spreadsheet_id, sheet_name, tipo='turnos'):
             return
 
         body = {'values': headers}
-        service.spreadsheets().values().update(
+
+        _build_service().spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
             range=full_range,
             valueInputOption='USER_ENTERED',
             body=body
         ).execute()
+
         logger.info(f"✅ Encabezados Inicializados en: '{sheet_name}'")
     except Exception as e:
         logger.error(f"ERROR Inicializando Encabezados en: '{sheet_name}': {e}")
@@ -1212,7 +1216,7 @@ def ordenar_hoja():
             }
         }]
 
-        service.spreadsheets().batchUpdate(
+        _build_service().spreadsheets().batchUpdate(
             spreadsheetId=SPREADSHEET_ID,
             body={'requests': requests_body}
         ).execute()
@@ -1918,9 +1922,9 @@ def reconstruir_calendario_completo():
                 fila.append(turnos_del_dia[hora][staff])
             todas_las_filas.append(fila)
 
-    # Limpiar el calendario completo.-
+    # Limpiar él Calendario Completo.-
     try:
-        sheets.values().clear(
+        _build_service().spreadsheets().values().clear(
             spreadsheetId=SPREADSHEET_ID,
             range=_safe_range(CALENDARIO_SHEET, 'A1:Z5000')
         ).execute()
@@ -1936,7 +1940,7 @@ def reconstruir_calendario_completo():
             f"A1:{letra_fin}{len(todas_las_filas)}"
         )
 
-        sheets.values().update(
+        _build_service().spreadsheets().values().update(
             spreadsheetId=SPREADSHEET_ID,
             range=rango_total,
             valueInputOption='USER_ENTERED',
