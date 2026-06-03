@@ -485,9 +485,13 @@ def _liberar_reservas_expiradas_impl():
             logger.error(f"❌ ERROR al Importar conversations: {e}")
             return
 
+    # Optimización de Recursos: Sí Nó Hay Conversaciones Activas, Nó Leemos la Hoja.-
+    # Evita Llamadas Innecesarias a Google Sheets en Standby ( MEMORY Ingeniería en Sistemas ).-
+    if not conversations:
+        return
+
     # El timeout Yá Está Configurado én él Cliente httplib2 Dentro dé sheet_service.-
     #logger.error(f"🔍 DEBUG: Antes de read_sheet()...")
-
     try:
         data = read_sheet()
 
