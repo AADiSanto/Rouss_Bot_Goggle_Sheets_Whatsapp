@@ -429,18 +429,6 @@ def confirmar_reserva(reservation_id):
     return True
 
 
-# Busca y Marca como Expiradas Las Reservas que Superaron el Tiempo Límite.-
-def liberar_reservas_expiradas():
-    # ---------------------------------------------------------------------------------
-    # WRAPPER GLOBAL: Garantiza que el Job SIEMPRE Termine — Nunca Quede Colgado.-
-    # Sin Esto, un Error 503 de Google deja el Job Bloqueado para Siempre en APScheduler.-
-    # ---------------------------------------------------------------------------------
-    try:
-        _liberar_reservas_expiradas_impl()
-    except Exception as e:
-        logger.error(f"❌ ERROR CRÍTICO en liberar_reservas_expiradas: {type(e).__name__}: {e}")
-
-
 def _liberar_reservas_expiradas_impl():
     # ---------------------------------------------------------------------------------
     # CONTROL DE LOGS ( RAILWAY ): 10800 Segundos = 03 Horas.-
@@ -471,16 +459,29 @@ def _liberar_reservas_expiradas_impl():
             logger.error(f"❌ ERROR al Importar conversations/reservas_pendientes: {e}")
             return
 
+    # Usamos el Motor de Tiempo de MEMORY Ingeniería en Sistemas.-
+    now = obtener_ahora()
+
     # ---------------------------------------------------------------------------------
     # VERIFICACIÓN EN MEMORIA: Sín Llamadas a Google Sheets en Standby.-
     # Solo Accede a la Hoja cuando Hay Reservas Expiradas Reales.-
     # MEMORY Ingeniería en Sistemas.-
     # ---------------------------------------------------------------------------------
     if not reservas_pendientes:
+        # Limpiar Conversaciones Inactivas ( Sin Llamadas a Google Sheets ).-
+        try:
+            from datetime import timedelta
+            ttl_minutos = int(os.getenv('CONVERSATIONS_TTL_MINUTOS', '5'))
+            expiradas_conv = [
+                tel for tel, state in list(conversations.items())
+                if state.get('step', 0) == 0
+                   and (now - state.get('ts_ultimo', now)) > timedelta(minutes=ttl_minutos)
+            ]
+            for tel in expiradas_conv:
+                conversations.pop(tel, None)
+        except Exception as e:
+            logger.error(f"ERROR: al Limpiar Conversaciones Inactivas: {e}")
         return
-
-    # Usamos el Motor de Tiempo de MEMORY Ingeniería en Sistemas.-
-    now = obtener_ahora()
 
     # Buscar Reservas Expiradas en el Diccionario en Memoria.-
     expiradas = {
@@ -661,6 +662,10 @@ def iniciar_scheduler(interval_seconds: int = None):
                     colorear_feriados()
                     log_throttled('info', ">>> 🎨 Estado: El Proceso 'colorear_feriados()' Sigue Activo ( Resúmen Según .env )...", logger)
 
+                    # Refrescar Caché de Datos Estáticos del Negocio ( Una Vez por Día ).-
+                    from sheets.sheet_service import refrescar_cache_negocio
+                    refrescar_cache_negocio()
+
                 except Exception as e:
                     # Los errores SIEMPRE se informan de inmediato.-
                     logger.error(
@@ -669,12 +674,12 @@ def iniciar_scheduler(interval_seconds: int = None):
                     )
 
             _SCHEDULER.add_job(
-                colorear_feriados_safe, 'interval',   # ← Usar wrapper.-
+                colorear_feriados_safe, 'interval',  # ← Usar wrapper.-
                 minutes=int(os.getenv('TIEMPO_COLOREAR_FERIADOS_MINUTOS', '60')),
                 id='colorear_feriados',
-                max_instances=1,          # ← Evita Ejecuciones Paralelas.-
-                coalesce=True,            # ← Unifica Ejecuciones Atrasadas.-
-                misfire_grace_time=60     # ← Mayor Tolerancia ( Tarea Menos Crítica ).-
+                max_instances=1,       # ← Evita Ejecuciones Paralelas.-
+                coalesce=True,         # ← Unifica Ejecuciones Atrasadas.-
+                misfire_grace_time=60  # ← Mayor Tolerancia ( Tarea Menos Crítica ).-
             )
 
             logger.info(f"(scheduler) Job 'colorear_feriados' Agregado ( Cada {os.getenv('TIEMPO_COLOREAR_FERIADOS_MINUTOS', '60')} Minutos )...")
