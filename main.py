@@ -134,7 +134,7 @@ try:
     generar_horarios_disponibles_dia(_ahora_cache().strftime('%Y-%m-%d'))
     es_feriado(_ahora_cache().strftime('%Y-%m-%d'))
     print("✅ Caché de Datos Estáticos del Negocio Pre-Cargado Correctamente al Iniciar...")
-    
+
 except Exception as e:
     print(f"⚠️  ERROR: al Pre-Cargar Caché del Negocio: {e}")
 
