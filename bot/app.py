@@ -177,6 +177,14 @@ VERIFY_TOKEN = os.getenv('WEBHOOK_VERIFY_TOKEN')
 # Diccionario para Mantener Estado de Conversaciones ( En Producción Usar Redis / DB ).-
 conversations = {}
 
+# ---------------------------------------------------------------------------------
+# Diccionario Global de Reservas Pendientes en Memoria.-
+# Independiente de conversations — Persiste aunque el Cliente Nó Escriba Nada.-
+# Clave: reservation_id | Valor: telefono + timestamp_expiracion.-
+# Se Puebla al Crear, Se Limpia al Confirmar o Cancelar.-
+# MEMORY Ingeniería en Sistemas.-
+# ---------------------------------------------------------------------------------
+reservas_pendientes = {}
 
 @app.route('/webhook', methods=['GET'])
 # Verificación del webhook por Parte de Meta.-
@@ -296,6 +304,7 @@ def process_text_message(sender, text):
             except Exception as e:
                 logger.error(f"ERROR: al Cancelar Reserva por 'Error': {e}")
         conversations[sender] = {'step': 0}
+        reservas_pendientes.pop(state.get('reservation_id', ''), None)
         send_message(sender,
                      "🔄 *Proceso Cancelado*. Cuando Quieras Empezar de Nuevo Escribí *'Turno'*...")
         return
@@ -575,6 +584,16 @@ def process_text_message(sender, text):
 
             state['reservation_id'] = reservation_id
 
+            # Registrar en Diccionario Global de Reservas Pendientes.-
+            from datetime import timedelta
+            from sheets.utils import obtener_ahora as _obtener_ahora
+            _segundos = int(os.getenv('TIEMPO_RESERVA_SEGUNDOS', 60))
+            reservas_pendientes[reservation_id] = {
+                'telefono': telefono,
+                'timestamp_expiracion': _obtener_ahora() + timedelta(seconds=_segundos)
+            }
+            logger.info(f"📋 Reserva {reservation_id} Registrada en reservas_pendientes.-")
+
             # Importar datetime Localmente.-
             from datetime import datetime as dt_now
             state['timestamp_reserva'] = dt_now.now(tz)
@@ -636,6 +655,7 @@ def process_text_message(sender, text):
                                              f"⚠️ ⏰ Lo Siento: {state['nombre']}, Tú Reserva del Turno, Expiró ( Pasó Más De 01 Minuto ),\n\n"
                                                           "Por Favor Comenzá de Nuevo Escribiendo 'Turno'...")
                                 conversations[sender] = {'step': 0}
+                                reservas_pendientes.pop(state.get('reservation_id'), None)
                                 return
                         break
             except Exception as e:
@@ -649,9 +669,8 @@ def process_text_message(sender, text):
             if success:
                 state['confirmado'] = True
                 icono_srv = SERVICE_ICONS.get(state['servicio'], '✂️')
-
                 conversations[sender] = {'step': 0}
-
+                reservas_pendientes.pop(state.get('reservation_id'), None)
                 send_message(sender,
                              f"✔ ¡ TURNO CONFIRMADO !...\n\n"
                              f"👤 Cliente/a : {state['nombre']}\n"
@@ -663,6 +682,7 @@ def process_text_message(sender, text):
                 return
             else:
                 conversations[sender] = {'step': 0}
+                reservas_pendientes.pop(state.get('reservation_id'), None)
 
                 send_message(sender,
                              f"⚠️ ⏰ Lo Siento: {state['nombre']}, Tú Reserva Expiró... Por Favor Comenzá de Nuevo Escribiendo 'Turno', Gracias...")
@@ -685,6 +705,7 @@ def process_text_message(sender, text):
             send_message(sender, f"{state['nombre']}, Reserva Cancelada. Sí Querés Agendar Otro Turno, Escribí 'Turno'...")
 
             conversations[sender] = {'step': 0}
+            reservas_pendientes.pop(state.get('reservation_id'), None)
 
             return
 
