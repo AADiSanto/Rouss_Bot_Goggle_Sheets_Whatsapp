@@ -67,10 +67,6 @@ from sheets.sheet_service import obtener_staff_negocio
 # Importar Servicios del Negocio.-
 from sheets.sheet_service import obtener_servicios_negocio
 
-# Cache para Nombres del Staff (evita leer Google Sheets en cada mensaje).-
-_STAFF_CACHE = None
-_STAFF_CACHE_TIME = 0
-
 # --------------------------------------------------------------------------------------
 # Íconos Globales de Servicios del Negocio (Centralizado - Keys con Mayúscula Inicial) -
 # --------------------------------------------------------------------------------------
@@ -85,39 +81,13 @@ SERVICE_ICONS = {
 
 
 def get_staff_names():
-    """Obtiene Nombres del Staff con caché de 05 Minutos"""
-    global _STAFF_CACHE, _STAFF_CACHE_TIME
-    import time
-
-    now = time.time()
-    # Refrescar Caché Cada 05 minutos (300 Segundos).-
-    if _STAFF_CACHE is None or (now - _STAFF_CACHE_TIME) > 300:
-        _STAFF_CACHE = obtener_staff_negocio()
-        _STAFF_CACHE_TIME = now
-
-        log_throttled('info', f"🔄 Caché de Staff Actualizado: {_STAFF_CACHE}", logger)
-
-    return _STAFF_CACHE
-
-# Cache para Staff con IDs ( Evita Leer Google Sheets en Cada Mensaje ).-
-_STAFF_IDS_CACHE = None
-_STAFF_IDS_CACHE_TIME = 0
+    """Obtiene Nombres del Staff desde Caché en Memoria ( Cargado al Iniciar ).-"""
+    return obtener_staff_negocio()
 
 
 def get_staff_with_ids():
-    """Obtiene Staff con IDStaff con caché de 05 Minutos.-"""
-    global _STAFF_IDS_CACHE, _STAFF_IDS_CACHE_TIME
-    import time
-
-    now = time.time()
-    # Refrescar Caché Cada 05 Minutos ( 300 Segundos ).-
-    if _STAFF_IDS_CACHE is None or (now - _STAFF_IDS_CACHE_TIME) > 300:
-        _STAFF_IDS_CACHE = obtener_staff_con_ids()
-        _STAFF_IDS_CACHE_TIME = now
-
-        log_throttled('info', f"🔄 Caché de Staff con IDs Actualizado: {_STAFF_IDS_CACHE}", logger)
-
-    return _STAFF_IDS_CACHE
+    """Obtiene Staff con IDStaff desde Caché en Memoria ( Cargado al Iniciar ).-"""
+    return obtener_staff_con_ids()
 
 
 # ---------------------------------------------------------------------------------
@@ -283,6 +253,9 @@ def process_text_message(sender, text):
         conversations[sender] = {'step': 0}
 
     state = conversations[sender]
+
+    from datetime import datetime
+    state['ts_ultimo'] = datetime.now(tz)
 
     step = state['step']
 
