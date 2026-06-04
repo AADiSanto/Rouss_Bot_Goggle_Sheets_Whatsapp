@@ -485,17 +485,6 @@ def _liberar_reservas_expiradas_impl():
             logger.error(f"❌ ERROR al Importar conversations: {e}")
             return
 
-        # Optimización de Recursos: Verificar Conversaciones Activas en Memoria.-
-        # Si hay conversaciones con step > 0 — hay reservas recientes en proceso.-
-        # Si conversations está vacío ( ej: tras un redeploy ) — igual leemos la hoja
-        # porque pueden existir reservas Pendientes/Provisionales sin expirar en Google Sheets.-
-        hay_conversaciones_activas = any(
-            v.get('step', 0) > 0
-            for v in conversations.values()
-        )
-        if not hay_conversaciones_activas and conversations:
-            return
-
     # El timeout Yá Está Configurado én él Cliente httplib2 Dentro dé sheet_service.-
     #logger.error(f"🔍 DEBUG: Antes de read_sheet()...")
     try:
