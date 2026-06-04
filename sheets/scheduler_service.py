@@ -463,35 +463,54 @@ def _liberar_reservas_expiradas_impl():
     # ya estén cargados en memoria al momento de la ejecución.-
     # ---------------------------------------------------------------------------------
     try:
+        from bot.app import conversations, reservas_pendientes
+    except Exception:
+        try:
+            from app import conversations, reservas_pendientes
+        except Exception as e:
+            logger.error(f"❌ ERROR al Importar conversations/reservas_pendientes: {e}")
+            return
+
+    # ---------------------------------------------------------------------------------
+    # VERIFICACIÓN EN MEMORIA: Sín Llamadas a Google Sheets en Standby.-
+    # Solo Accede a la Hoja cuando Hay Reservas Expiradas Reales.-
+    # MEMORY Ingeniería en Sistemas.-
+    # ---------------------------------------------------------------------------------
+    if not reservas_pendientes:
+        return
+
+    # Usamos el Motor de Tiempo de MEMORY Ingeniería en Sistemas.-
+    now = obtener_ahora()
+
+    # Buscar Reservas Expiradas en el Diccionario en Memoria.-
+    expiradas = {
+        rid: datos
+        for rid, datos in list(reservas_pendientes.items())
+        if now > datos['timestamp_expiracion']
+    }
+
+    if not expiradas:
+        return
+
+    # ---------------------------------------------------------------------------------
+    # ✅ SOLUCIÓN A REFERENCIAS ( MEMORY Ingeniería en Sistemas ):
+    # Importamos AQUÍ adentro para evitar circularidad y asegurar que los módulos
+    # ya estén cargados en memoria al momento de la ejecución.-
+    # ---------------------------------------------------------------------------------
+    try:
         from sheets.sheet_service import read_sheet, update_row, _invalidar_servicio_hilo
         from bot.whatsapp_service import send_message
-        from googleapiclient.errors import HttpError
     except ImportError:
         try:
             from sheet_service import read_sheet, update_row, _invalidar_servicio_hilo
             from whatsapp_service import send_message
-            from googleapiclient.errors import HttpError
         except ImportError as e:
             logger.error(f"❌ ERROR de Referencia en Imports Locales: {e}")
             return
 
-    # Importación Unificada: Producción ( Railway ) y Desarrollo ( PyCharm + NGrok ).-
-    try:
-        from bot.app import conversations
-    except Exception:
-        try:
-            from app import conversations
-        except Exception as e:
-            logger.error(f"❌ ERROR al Importar conversations: {e}")
-            return
-
-    # El timeout Yá Está Configurado én él Cliente httplib2 Dentro dé sheet_service.-
-    #logger.error(f"🔍 DEBUG: Antes de read_sheet()...")
+    # Leer la Hoja Solo Una Vez para Todas las Reservas Expiradas.-
     try:
         data = read_sheet()
-
-        #logger.error(f"🔍 DEBUG: read_sheet() retornó: {len(data)} filas")
-
     except (BrokenPipeError, ConnectionResetError, OSError) as e:
         _invalidar_servicio_hilo()
         time.sleep(1)
@@ -505,59 +524,16 @@ def _liberar_reservas_expiradas_impl():
         _invalidar_servicio_hilo()
         return
 
-    # Usamos el Motor de Tiempo de MEMORY Ingeniería en Sistemas.-
-    now = obtener_ahora()
+    for reservation_id, datos in expiradas.items():
+        telefono_cliente = datos['telefono']
 
-    for i, row in enumerate(data, start=2):
-        try:
-            # Validación: 6=Estado, 7=Activo, 12=Timestamp Expiración.-
-            if len(row) >= 13 and row[6] in ['Pendiente', 'Provisional'] and (row[7] or '').upper() == 'TRUE':
+        for i, row in enumerate(data, start=2):
+            try:
+                if len(row) >= 13 and row[11] == reservation_id:
 
-                timestamp_str = (row[12] or '').strip()
-
-                if not timestamp_str:
-                    continue
-
-                try:
-                    ts = datetime.fromisoformat(timestamp_str)
-                    if ts.tzinfo is None:
-                        ts = tz.localize(ts)
-                    # ts ( Columna M ) Yá és el Timestamp de Expiración Calculado al Crear la Reserva.-
-                    # COMPARACIÓN: Si el límite ( 01 Minuto ), Yá Pasó Respecto a 'now'.-
-                    if now > ts:
-                        logger.info(f"⚠️ Marcando Reserva {row[11]} como EXPIRADA...")
-
-                        # REVALIDACIÓN ANTES DE ACTUALIZAR ( CRÍTICO ).-
-                        # Timeout Explícito: Sí Google Sheets Nó Responde en 20s, Saltamos la Fila.-
-                        try:
-                            import signal
-
-                            def _timeout_handler(signum, frame):
-                                raise TimeoutError("Revalidación Google Sheets: Timeout 20s")
-
-                            signal.signal(signal.SIGALRM, _timeout_handler)
-                            signal.alarm(20)
-
-                            try:
-                                data_actualizada = read_sheet()
-                                fila_actual = data_actualizada[i - 2]
-                                if len(fila_actual) >= 8:
-                                    if fila_actual[6] not in ['Pendiente', 'Provisional'] or (
-                                            fila_actual[7] or '').upper() != 'TRUE':
-                                        signal.alarm(0)
-                                        continue
-                            finally:
-                                signal.alarm(0)  # ← Cancelar Alarma Sí Todo Salió Bien.-
-
-                        except TimeoutError as e_timeout:
-                            logger.error(f"⏱️ TIMEOUT Revalidación Fila {i}: {e_timeout} — Sé Omite.-")
-                            continue
-                        except Exception:
-                            continue
-
-                        # Datos para la Notificación.-
-                        telefono_cliente = str(row[1]).strip()
-                        id_reserva = row[11]
+                    # Solo Expirar Sí Todavía Está Pendiente o Provisional.-
+                    if row[6] in ['Pendiente', 'Provisional'] and (row[7] or '').upper() == 'TRUE':
+                        logger.info(f"⚠️ Marcando Reserva {reservation_id} como EXPIRADA...")
 
                         # Marcar como Expirada en la Hoja.-
                         row[6] = 'Expirada'
@@ -567,7 +543,7 @@ def _liberar_reservas_expiradas_impl():
                             row.append('')
 
                         update_row(i, row)
-                        logger.info(f"✅ Reserva {id_reserva} Expirada Automáticamente (Fila {i})")
+                        logger.info(f"✅ Reserva {reservation_id} Expirada Automáticamente (Fila {i})")
 
                         # ✅ NOTIFICACIÓN ACTIVA AL CLIENTE.-
                         try:
@@ -585,12 +561,13 @@ def _liberar_reservas_expiradas_impl():
                         except Exception as e_msg:
                             logger.error(f"ERROR: Enviándo Notificación dé Expiración: {e_msg}")
 
-                except ValueError:
-                    continue
+                    # Eliminar del Diccionario en Memoria ( Confirmada, Cancelada o Expirada ).-
+                    reservas_pendientes.pop(reservation_id, None)
+                    break
 
-        except Exception as e:
-            logger.exception(f"ERROR: al Procesar Expiración en Fila {i}: {e}")
-            continue
+            except Exception as e:
+                logger.exception(f"ERROR: al Procesar Expiración {reservation_id} en Fila {i}: {e}")
+                continue
 
 
 #Inicia ( o Retorna ) el Scheduler de Tareas en Segundo Plano.-
