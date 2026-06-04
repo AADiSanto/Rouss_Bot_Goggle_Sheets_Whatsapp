@@ -808,7 +808,17 @@ def generar_hoja_del_proximo_año():
     print(f"✔ Hoja del Año {año_proximo} Creada / Verificada Correctamente.")
     print(f"🆔 SPREADSHEET_ID_{año_proximo} = {spreadsheet_id}")
 
-    # 2) Guardar en .env (compatibilidad igual a SPREADSHEET_ID_2025).-
+    # COPIAR PERMISOS DESDE LA HOJA BASE DEL AÑO ACTUAL.-
+    #hoja_base_id = SPREADSHEET_IDS_BY_YEAR.get(str(año_actual))
+    hoja_base_id = SPREADSHEET_IDS_BY_YEAR.get(año_actual)
+
+    if hoja_base_id:
+        print(f"🔄 Copiando Permisos desde la Hoja Base: {hoja_base_id}...")
+        copiar_permisos_de_hoja(hoja_base_id, spreadsheet_id)
+    else:
+        print("⚠️ Advertencia: Nó sé Encontró Hoja Base para Copiar Permisos.-")
+
+    # 2) Guardar en .env ( compatibilidad igual a SPREADSHEET_ID_2025 ).-
     env_path = os.path.join(os.getcwd(), '.env')
 
     try:
@@ -2361,6 +2371,40 @@ def smoke_test():
     # Append de Prueba: Comentarlo Sí Nó Sé Quiere Escribir en la Hoja.-
     smoke_test_append()
     print("=== Smoke Test Completado ===")
+
+
+# ***********************************************************************************************
+#  NUEVA FUNCIÓN: Copiar Permisos de una Hoja a Otra.-
+# ***********************************************************************************************
+def copiar_permisos_de_hoja(origen_id, destino_id):
+    """
+    Copia Los Permisos de Usuario, Grupo o Dominio Desde Una Hoja Origen a Una Hoja Destino.-
+    """
+    global service
+    try:
+        permisos = service.permissions().list(
+            fileId=origen_id,
+            fields='permissions(role, type, emailAddress, domain)'
+        ).execute()
+
+        for permiso in permisos.get('permissions', []):
+            # No duplicar el permiso del propietario.-
+            if permiso.get('role') == 'owner':
+                continue
+
+            # Aplicar permiso al nuevo archivo.-
+            service.permissions().create(
+                fileId=destino_id,
+                body=permiso,
+                fields='id'
+            ).execute()
+
+        print(f"✅ Permisos Copiados Correctamente de {origen_id} a {destino_id} la nueva Hoja de Google Sheet's...")
+        return True
+
+    except Exception as e:
+        print(f"❌ ERROR al Copiar Permisos a la nueva Hoja de Google Sheet's...: {e}")
+        return False
 
 
 if __name__ == "__main__":
