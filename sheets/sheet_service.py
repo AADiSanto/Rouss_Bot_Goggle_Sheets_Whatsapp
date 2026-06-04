@@ -1025,6 +1025,15 @@ else:
         # Opcional: Confirmar en Log que la Hoja fué Encontrada.-
         logger.info(f"(DEBUG) Hoja Encontrada: '{SHEET_NAME}' en Spreadsheet {SPREADSHEET_ID}")
         DATA_AVAILABLE = True
+        # ---------------------------------------------------------------------------------
+        # CACHÉ EN MEMORIA: Datos Estáticos del Negocio ( Se Cargan al Iniciar ).-
+        # Se Refrescan Una Vez por Día desde el Scheduler ( MEMORY Ingeniería en Sistemas ).-
+        # ---------------------------------------------------------------------------------
+        _CACHE_HORARIOS = None
+        _CACHE_FERIADOS = None
+        _CACHE_SERVICIOS = None
+        _CACHE_STAFF = None
+        _CACHE_STAFF_IDS = None
 
 
 # --- Helper para Construir Rangos Seguros ---
@@ -1133,17 +1142,23 @@ def es_feriado(fecha):
     • Solo considera filas donde la columna 'Activo' (D) NO sea FALSE / NO / 0.
     """
     FERIADOS_SHEET = 'Turnos_Feriados'
-    try:
-        full_range = _safe_range(FERIADOS_SHEET, 'A2:D100')
-        with _api_lock:
-            result = _build_service().spreadsheets().values().get(
-                spreadsheetId=SPREADSHEET_ID,
-                range=full_range
-            ).execute()
 
-        rows = result.get('values', []) or []
+    global _CACHE_FERIADOS
+
+    try:
+        if _CACHE_FERIADOS is None:
+            full_range = _safe_range(FERIADOS_SHEET, 'A2:D100')
+            with _api_lock:
+                result = _build_service().spreadsheets().values().get(
+                    spreadsheetId=SPREADSHEET_ID,
+                    range=full_range
+                ).execute()
+            _CACHE_FERIADOS = result.get('values', []) or []
+            logger.info("✅ Caché de Feriados Cargado desde Google Sheets al Iniciar...")
+
+        rows = _CACHE_FERIADOS
     except HttpError as e:
-        logger.error(f"ERROR al Leer Pestaña de Feriados: {e}")
+        logger.error(f"ERROR al Leer Pestaña de Feriados en Google Sheet's: {e}")
         return False
 
     # Normalizar la Fecha de Entrada (por Seguridad).-
@@ -1341,15 +1356,20 @@ def generar_horarios_disponibles_dia(fecha):
 
     HORARIOS_SHEET = 'Turnos_Horarios_Negocio'
 
-    try:
-        full_range = _safe_range(HORARIOS_SHEET, 'A2:F10')
-        with _api_lock:
-            result = _build_service().spreadsheets().values().get(
-                spreadsheetId=SPREADSHEET_ID,
-                range=full_range
-            ).execute()
+    global _CACHE_HORARIOS
 
-        rows = result.get('values', []) or []
+    try:
+        if _CACHE_HORARIOS is None:
+            full_range = _safe_range(HORARIOS_SHEET, 'A2:F10')
+            with _api_lock:
+                result = _build_service().spreadsheets().values().get(
+                    spreadsheetId=SPREADSHEET_ID,
+                    range=full_range
+                ).execute()
+            _CACHE_HORARIOS = result.get('values', []) or []
+            logger.info("✅ Caché de Horarios del Negocio Cargado desde Google Sheets al Iniciar...")
+
+        rows = _CACHE_HORARIOS
     except HttpError as e:
         logger.error(f"ERROR al Leer Horarios del Negocio: {e}")
         # Fallback a Horarios por Defecto.-
@@ -2136,15 +2156,21 @@ def obtener_staff_negocio():
     """
     STAFF_SHEET = 'Turnos_Staff_Negocio'
 
-    try:
-        full_range = _safe_range(STAFF_SHEET, 'A2:A100')
-        result = _build_service().spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=full_range
-        ).execute()
-        rows = result.get('values', []) or []
+    global _CACHE_STAFF
 
-        # Filtrar nombres vacíos y normalizar.-
+    try:
+        if _CACHE_STAFF is None:
+            full_range = _safe_range(STAFF_SHEET, 'A2:A100')
+            result = _build_service().spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range=full_range
+            ).execute()
+            _CACHE_STAFF = result.get('values', []) or []
+            logger.info("✅ Caché de Staff Cargado desde Google Sheets al Iniciar...")
+
+        rows = _CACHE_STAFF
+
+        # Filtrar Nombres Vacíos y Normalizar.-
         staff_names = [row[0].strip() for row in rows if row and row[0].strip()]
 
         if not staff_names:
@@ -2169,13 +2195,19 @@ def obtener_staff_con_ids():
     """
     STAFF_SHEET = 'Turnos_Staff_Negocio'
 
+    global _CACHE_STAFF_IDS
+
     try:
-        full_range = _safe_range(STAFF_SHEET, 'A2:B100')
-        result = _build_service().spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=full_range
-        ).execute()
-        rows = result.get('values', []) or []
+        if _CACHE_STAFF_IDS is None:
+            full_range = _safe_range(STAFF_SHEET, 'A2:B100')
+            result = _build_service().spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range=full_range
+            ).execute()
+            _CACHE_STAFF_IDS = result.get('values', []) or []
+            logger.info("✅ Caché de Staff con IDs Cargado desde Google Sheets al Iniciar...")
+
+        rows = _CACHE_STAFF_IDS
 
         # Filtrar Filas Vacías y Construir Lista de Dicts.-
         staff = [
@@ -2218,12 +2250,18 @@ def obtener_servicios_negocio():
     Lee Columnas: A (Servicio), B (Activo), C (Icono), D (IDServicios), E (Costo).-
     """
 
+    global _CACHE_SERVICIOS
+
     try:
+        if _CACHE_SERVICIOS is None:
+            _CACHE_SERVICIOS = _build_service().spreadsheets().values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range=_safe_range('Turnos_Servicios_Negocio', 'A2:E100')
+            ).execute().get('values', [])
+            logger.info("✅ Caché de Servicios del Negocio Cargado desde Google Sheets...")
+
         # Leer Columnas A (Servicio), B (Activo), C (Icono), D (IDServicios), E (Costo).-
-        service_data = _build_service().spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=_safe_range('Turnos_Servicios_Negocio', 'A2:E100')
-        ).execute().get('values', [])
+        service_data = _CACHE_SERVICIOS
 
         servicios = []
 
@@ -2251,6 +2289,21 @@ def obtener_servicios_negocio():
     except Exception as e:
         logger.error(f"ERROR: al Leer Los Servicios del Negocio: {e}")
         return []
+
+
+# ---------------------------------------------------------------------------------
+# Refresco de Caché: Invalida Todos los Datos Estáticos del Negocio.-
+# Llamada Una Vez por Día desde el Scheduler ( MEMORY Ingeniería en Sistemas ).-
+# ---------------------------------------------------------------------------------
+def refrescar_cache_negocio():
+    """Invalida el Caché de Datos Estáticos para Forzar Recarga desde Google Sheets.-"""
+    global _CACHE_HORARIOS, _CACHE_FERIADOS, _CACHE_SERVICIOS, _CACHE_STAFF, _CACHE_STAFF_IDS
+    _CACHE_HORARIOS  = None
+    _CACHE_FERIADOS  = None
+    _CACHE_SERVICIOS = None
+    _CACHE_STAFF     = None
+    _CACHE_STAFF_IDS = None
+    logger.info("🔄 Caché de Datos Estáticos del Negocio Invalidado — Se Recargará en la Próxima Consulta...")
 
 
 # --------------------------------------------------------------------------------
