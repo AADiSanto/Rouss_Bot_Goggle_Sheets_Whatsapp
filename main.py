@@ -120,6 +120,24 @@ try:
 except Exception as e:
     print(f"⚠️  ERROR: al Configurar Hoja del Año: {e}")
 
+# ✅ Pre-Carga de Caché de Datos Estáticos del Negocio al Iniciar.-
+try:
+    from sheets.sheet_service import refrescar_cache_negocio
+    from sheets.sheet_service import obtener_staff_negocio, obtener_staff_con_ids
+    from sheets.sheet_service import obtener_servicios_negocio
+    from sheets.sheet_service import generar_horarios_disponibles_dia, es_feriado
+    from sheets.utils import obtener_ahora as _ahora_cache
+    refrescar_cache_negocio()
+    obtener_staff_negocio()
+    obtener_staff_con_ids()
+    obtener_servicios_negocio()
+    generar_horarios_disponibles_dia(_ahora_cache().strftime('%Y-%m-%d'))
+    es_feriado(_ahora_cache().strftime('%Y-%m-%d'))
+    print("✅ Caché de Datos Estáticos del Negocio Pre-Cargado Correctamente al Iniciar...")
+    
+except Exception as e:
+    print(f"⚠️  ERROR: al Pre-Cargar Caché del Negocio: {e}")
+
 
 # ---------------------------------------------------------------------------------
 # INICIO DEL SISTEMA ( MEMORY Ingeniería en Sistemas )
