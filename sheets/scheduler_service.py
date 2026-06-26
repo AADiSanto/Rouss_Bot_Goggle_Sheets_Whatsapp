@@ -690,7 +690,7 @@ def iniciar_scheduler(interval_seconds: int = None):
 
             _SCHEDULER.add_job(
                 colorear_feriados_safe, 'cron',  # ← Trigger Horario Fijo ( MEMORY Ingeniería en Sistemas ).-
-                hour=f'{_hora_inicio}/{_intervalo_hs}',  # ← Arranca a las 09:00, Repite Cada 18 Horas.-
+                hour='9,3',  # ← Dispara a las 09:00 y 03:00 ( Cada ~18 Horas - MEMORY Ingeniería en Sistemas ).-
                 minute=0,
                 id='colorear_feriados',
                 max_instances=1,  # ← Evita Ejecuciones Paralelas.-
