@@ -101,6 +101,13 @@ print("=============================================")
 # Importar Scheduler y Coloreo.-
 from sheets.sheet_service import colorear_feriados
 
+# ✅ Coloreo Inicial de Feriados al Arrancar ( Antes del Scheduler ).-
+try:
+    colorear_feriados()
+    print("🎨 Coloreo Inicial de Feriados Ejecutado al Arrancar la App...")
+except Exception as e:
+    print(f"⚠️  ERROR: al Ejecutar Coloreo Inicial de Feriados al Arrancar la App...: {e}")
+
 # Importar Obtener Año Activo.-
 from sheets.sheet_service import set_active_spreadsheet, get_current_year
 
