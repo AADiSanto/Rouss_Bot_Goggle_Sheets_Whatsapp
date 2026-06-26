@@ -466,9 +466,9 @@ def _liberar_reservas_expiradas_impl():
         from bot.app import conversations, reservas_pendientes
     except Exception:
         try:
-            from app import conversations, reservas_pendientes
+            from bot.app import conversations, reservas_pendientes
         except Exception as e:
-            logger.error(f"❌ ERROR al Importar conversations/reservas_pendientes: {e}")
+            logger.error(f"❌ ERROR al Importar conversations / reservas_pendientes: {e}")
             return
 
     # Usamos el Motor de Tiempo de MEMORY Ingeniería en Sistemas.-
@@ -607,7 +607,7 @@ def iniciar_scheduler(interval_seconds: int = None):
         print("⏱️  CONFIGURACIÓN DE TIEMPOS DEL SISTEMA:")
         print(f"   • TIEMPO_RESERVA_SEGUNDOS          : {RESERVA_SECONDS}s")
         print(f"   • TIEMPO_LIBERAR_RESERVAS_SEGUNDOS : {interval_seconds}s ({interval_seconds // 60} min)")
-        print(f"   • TIEMPO_COLOREAR_FERIADOS_MINUTOS : {int(os.getenv('TIEMPO_COLOREAR_FERIADOS_MINUTOS', '60'))} min")
+        print(f"   • TIEMPO_COLOREAR_FERIADOS_HORAS   : {int(os.getenv('TIEMPO_COLOREAR_FERIADOS_HORAS', '18'))}hs desde las {int(os.getenv('TIEMPO_COLOREAR_FERIADOS_HORA_INICIO', '9')):02d}:00")
         print(f"   • LOGS_RESUMIDOS                   : {os.getenv('LOGS_RESUMIDOS', 'false').upper()}")
         print(f"   • LOGS_INTERVALO_HORAS             : {os.getenv('LOGS_INTERVALO_HORAS', '3')}h")
         print("=" * 55)
@@ -685,16 +685,21 @@ def iniciar_scheduler(interval_seconds: int = None):
                         f"( Reintento én Próximo Ciclo ): {type(e).__name__}: {e}"
                     )
 
+            _hora_inicio = int(os.getenv('TIEMPO_COLOREAR_FERIADOS_HORA_INICIO', '9'))
+            _intervalo_hs = int(os.getenv('TIEMPO_COLOREAR_FERIADOS_HORAS', '18'))
+
             _SCHEDULER.add_job(
-                colorear_feriados_safe, 'interval',  # ← Usar wrapper.-
-                minutes=int(os.getenv('TIEMPO_COLOREAR_FERIADOS_MINUTOS', '60')),
+                colorear_feriados_safe, 'cron',  # ← Trigger Horario Fijo ( MEMORY Ingeniería en Sistemas ).-
+                hour=f'{_hora_inicio}/{_intervalo_hs}',  # ← Arranca a las 09:00, Repite Cada 18 Horas.-
+                minute=0,
                 id='colorear_feriados',
-                max_instances=1,       # ← Evita Ejecuciones Paralelas.-
-                coalesce=True,         # ← Unifica Ejecuciones Atrasadas.-
+                max_instances=1,  # ← Evita Ejecuciones Paralelas.-
+                coalesce=True,  # ← Unifica Ejecuciones Atrasadas.-
                 misfire_grace_time=60  # ← Mayor Tolerancia ( Tarea Menos Crítica ).-
             )
 
-            logger.info(f"(scheduler) Job 'colorear_feriados' Agregado ( Cada {os.getenv('TIEMPO_COLOREAR_FERIADOS_MINUTOS', '60')} Minutos )...")
+            logger.info(
+                f"(scheduler) Job 'colorear_feriados' Agregado ( Cron: Cada {_intervalo_hs}hs desde las {_hora_inicio:02d}:00 )...")
 
         except Exception as e:
             logger.error(f"(scheduler) ERROR: al Agregar Job colorear_feriados: {e}")
